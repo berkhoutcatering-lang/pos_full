@@ -49,6 +49,9 @@ fi
 # directory into the build container.
 rm -rf "${PI_GEN_DIR}/stage-pos"
 cp -r "${SCRIPT_DIR}/stage-pos" "${PI_GEN_DIR}/stage-pos"
+# pi-gen silently SKIPS prerun.sh and *-run.sh that are not executable, which
+# breaks the build later with "Unable to chroot" — never rely on checkout modes.
+find "${PI_GEN_DIR}/stage-pos" -type f -name '*.sh' -exec chmod +x {} +
 
 # Export only our image, not the intermediate lite image.
 touch "${PI_GEN_DIR}/stage2/SKIP_IMAGES"
