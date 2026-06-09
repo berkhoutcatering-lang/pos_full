@@ -43,6 +43,9 @@ const ConfigSchema = z.object({
 
   // Allowed PWA origins for CORS (comma-separated)
   ALLOWED_ORIGINS: z.string().default("https://hopbites.app,https://*.hopbites.app"),
+
+  // Sentry error/perf reporting — empty disables it (SDK no-op).
+  SENTRY_DSN: z.string().optional(),
 })
 
 export const config = ConfigSchema.parse(process.env)

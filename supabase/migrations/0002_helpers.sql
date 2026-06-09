@@ -33,18 +33,26 @@ as $$
 $$;
 
 -- Returns the current user's role for the active org (from JWT).
+-- plpgsql (not sql) so the body — which references public.memberships,
+-- created in a later migration — is parsed at call time, not at create
+-- time. Otherwise `supabase db reset` fails applying this migration.
 create or replace function public.current_role_in_org()
 returns text
-language sql
+language plpgsql
 stable
 security definer
 set search_path = ''
 as $$
-  select m.role::text
+declare
+  v_role text;
+begin
+  select m.role::text into v_role
   from public.memberships m
   where m.user_id = (select auth.uid())
     and m.org_id = public.current_org_id()
-  limit 1
+  limit 1;
+  return v_role;
+end
 $$;
 
 -- "Does the current user have at least role X in org Y?"  Used in every

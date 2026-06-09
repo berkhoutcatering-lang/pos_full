@@ -33,7 +33,7 @@ as $$
   -- We invert: payload is safe iff no non-integer number is found.
   select not jsonb_path_exists(
     input,
-    'strict $.** ? (@.type() == "number" && @ != floor(@))'
+    'strict $.** ? (@.type() == "number" && @ != @.floor())'
   )
 $$;
 

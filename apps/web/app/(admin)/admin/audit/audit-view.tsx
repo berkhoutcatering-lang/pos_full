@@ -21,7 +21,10 @@ export function AuditView({ rows, orgId }: { rows: Row[]; orgId: string }) {
     const newest = rows[0]?.seq_id
     const res = await verifyChainAction({ from_seq: oldest, to_seq: newest })
     setVerifying(false)
-    if (!("ok" in res)) {
+    // The action can return a plain error shape ({ ok: false, error }) as
+    // well as the chain-verify union — both have ok:false, so discriminate
+    // on the presence of `error` first, then on `ok` for intact vs broken.
+    if ("error" in res) {
       setResult(`Hash chain check faalde: ${res.error}`)
       return
     }
@@ -29,7 +32,7 @@ export function AuditView({ rows, orgId }: { rows: Row[]; orgId: string }) {
       setResult(`Hash chain intact (${res.verified} events geverifieerd).`)
     } else {
       setResult(
-        `BREEK PUNT bij seq ${res.broken_at_seq}: verwacht ${res.expected?.slice(0, 16)}…, gevonden ${res.actual?.slice(0, 16)}…`,
+        `BREEK PUNT bij seq ${res.broken_at_seq}: verwacht ${res.expected.slice(0, 16)}…, gevonden ${res.actual.slice(0, 16)}…`,
       )
     }
   }

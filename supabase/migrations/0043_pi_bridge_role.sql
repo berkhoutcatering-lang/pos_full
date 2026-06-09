@@ -72,7 +72,7 @@ create policy "pos_payments_pi_bridge_write"
   with check (org_id = public.pi_bridge_org_id());
 
 -- 4) Explicitly deny pi_bridge access to other multi-tenant tables.
-revoke all on public.memberships, public.audit_log, public.moneybird_connections, public.qr_tokens from pi_bridge;
+revoke all on public.memberships, public.audit_log from pi_bridge;
 -- audit_log writes go via write_audit_log() only; INSERT is also
 -- revoked from service_role per migration 0042.
 

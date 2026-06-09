@@ -5,6 +5,23 @@
 -- The btw-classifier MUST be run against this file when items are added or
 -- changed (per WERK-MODE). BTW classes here are AUTHORITATIVE — never
 -- inferred at runtime.
+--
+-- NOTE: this migration runs BEFORE supabase/seed.sql, so it cannot rely on
+-- seed.sql for the dev org/venue rows. It creates them here (idempotent) so
+-- the menu FKs — and the venue_kds_settings seed in 0017 — resolve.
+
+insert into public.orgs (id, slug, name, kvk_number, btw_number, tier)
+values ('00000000-0000-0000-0000-000000000001','hop-en-bites-dev','Hop & Bites (dev)','12345678','NL000000000B01','pro')
+on conflict (id) do nothing;
+
+insert into public.venues (id, org_id, name, slug) values
+  ('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000001','Foodtruck Schoonoord','foodtruck-schoonoord'),
+  ('00000000-0000-0000-0000-000000000011','00000000-0000-0000-0000-000000000001','Festivalplaats','festival')
+on conflict (id) do nothing;
+
+insert into public.org_theme_settings (org_id, preset, brand_name)
+values ('00000000-0000-0000-0000-000000000001','hopbites','Hop & Bites')
+on conflict (org_id) do nothing;
 
 with v as (
   select
@@ -25,6 +42,7 @@ from v, (values
 on conflict (org_id, venue_id, name) do nothing;
 
 -- Sides (food_9)
+with v as (select '00000000-0000-0000-0000-000000000001'::uuid as org_id, '00000000-0000-0000-0000-000000000010'::uuid as venue_id)
 insert into public.pos_menu_items
   (org_id, venue_id, name, category, base_price_cents, btw_class, sort_order)
 select v.org_id, v.venue_id, name, 'sides', price, 'food_9'::public.btw_class, sort
@@ -36,6 +54,7 @@ from v, (values
 on conflict (org_id, venue_id, name) do nothing;
 
 -- Frisdrank / non-alc (food_9 — NL frisdrank laag tarief)
+with v as (select '00000000-0000-0000-0000-000000000001'::uuid as org_id, '00000000-0000-0000-0000-000000000010'::uuid as venue_id)
 insert into public.pos_menu_items
   (org_id, venue_id, name, category, base_price_cents, btw_class, sort_order)
 select v.org_id, v.venue_id, name, 'frisdrank', price, 'food_9'::public.btw_class, sort
@@ -47,6 +66,7 @@ from v, (values
 on conflict (org_id, venue_id, name) do nothing;
 
 -- Alcoholvrij bier (nonalc_beer_9 — 9% laag tarief)
+with v as (select '00000000-0000-0000-0000-000000000001'::uuid as org_id, '00000000-0000-0000-0000-000000000010'::uuid as venue_id)
 insert into public.pos_menu_items
   (org_id, venue_id, name, category, base_price_cents, btw_class, sort_order)
 select v.org_id, v.venue_id, name, 'bier', price, 'nonalc_beer_9'::public.btw_class, sort
@@ -57,6 +77,7 @@ from v, (values
 on conflict (org_id, venue_id, name) do nothing;
 
 -- Energy drinks (soda_21 — 21% hoog tarief, NL 2024)
+with v as (select '00000000-0000-0000-0000-000000000001'::uuid as org_id, '00000000-0000-0000-0000-000000000010'::uuid as venue_id)
 insert into public.pos_menu_items
   (org_id, venue_id, name, category, base_price_cents, btw_class, sort_order)
 select v.org_id, v.venue_id, name, 'energy', price, 'soda_21'::public.btw_class, sort
@@ -67,6 +88,7 @@ from v, (values
 on conflict (org_id, venue_id, name) do nothing;
 
 -- Bier + wijn + cocktails (alcohol_21)
+with v as (select '00000000-0000-0000-0000-000000000001'::uuid as org_id, '00000000-0000-0000-0000-000000000010'::uuid as venue_id)
 insert into public.pos_menu_items
   (org_id, venue_id, name, category, base_price_cents, btw_class, sort_order)
 select v.org_id, v.venue_id, name, 'alcohol', price, 'alcohol_21'::public.btw_class, sort
@@ -81,6 +103,7 @@ from v, (values
 on conflict (org_id, venue_id, name) do nothing;
 
 -- Statiegeld (deposit_0 — 0%)
+with v as (select '00000000-0000-0000-0000-000000000001'::uuid as org_id, '00000000-0000-0000-0000-000000000010'::uuid as venue_id)
 insert into public.pos_menu_items
   (org_id, venue_id, name, category, base_price_cents, btw_class, is_discountable, sort_order)
 select v.org_id, v.venue_id, name, 'statiegeld', price, 'deposit_0'::public.btw_class, false, sort
@@ -91,6 +114,7 @@ from v, (values
 on conflict (org_id, venue_id, name) do nothing;
 
 -- Service charge (service_0 — 0%, niet kortbaar)
+with v as (select '00000000-0000-0000-0000-000000000001'::uuid as org_id, '00000000-0000-0000-0000-000000000010'::uuid as venue_id)
 insert into public.pos_menu_items
   (org_id, venue_id, name, category, base_price_cents, btw_class, is_discountable, sort_order)
 select v.org_id, v.venue_id, name, 'service', price, 'service_0'::public.btw_class, false, sort

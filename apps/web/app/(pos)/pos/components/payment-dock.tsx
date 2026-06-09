@@ -1,5 +1,5 @@
 "use client"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ulid } from "ulid"
 import type { CartState } from "@/lib/pos/cart-reducer"
 import type { PricedCart } from "@/lib/pos/types"
@@ -15,6 +15,8 @@ import { CheckoutPin } from "./checkout-pin"
 import { useConnectionStatus } from "@/lib/pos/connection-status"
 
 export type CheckoutMethod = "cash" | "pin"
+type Corner = "br" | "bl"
+const CORNER_KEY = "hb_paydock_corner"
 
 // One attempt = one customer transaction. The keys live in a ref so a
 // double-tap or post-error retry hits the same idempotency_key + order_id
@@ -38,24 +40,52 @@ function freshAttempt(): AttemptKeys {
   }
 }
 
-export function CheckoutPane({
+/**
+ * Non-modal, operator-placeable pay control. It docks in a screen corner
+ * (default bottom-right) and NEVER covers the product grid — the operator
+ * can keep adding items while a customer fishes for their card. Tapping
+ * "Afrekenen" expands the dock in place; it does not open an overlay.
+ */
+export function PaymentDock({
   priced,
   cart,
   claims,
-  onBack,
+  expanded,
+  onExpandedChange,
   onDone,
 }: {
   priced: PricedCart
   cart: CartState
   claims: { orgId: string; venueId: string; role: string }
-  onBack: () => void
+  expanded: boolean
+  onExpandedChange: (next: boolean) => void
   onDone: () => void
 }) {
   const [method, setMethod] = useState<CheckoutMethod | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [corner, setCorner] = useState<Corner>("br")
   const attemptRef = useRef<AttemptKeys>(freshAttempt())
   const connection = useConnectionStatus()
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(CORNER_KEY)
+    if (saved === "bl" || saved === "br") setCorner(saved)
+  }, [])
+
+  const moveCorner = () => {
+    setCorner((c) => {
+      const next = c === "br" ? "bl" : "br"
+      window.localStorage.setItem(CORNER_KEY, next)
+      return next
+    })
+  }
+
+  const collapse = () => {
+    setMethod(null)
+    setError(null)
+    onExpandedChange(false)
+  }
 
   async function placeOrder(paidMethod: CheckoutMethod): Promise<
     { ok: true; order_id: string; order_label: string } | { ok: false; error: string }
@@ -165,77 +195,112 @@ export function CheckoutPane({
     return { ok: true, order_id, order_label }
   }
 
-  if (method === null) {
-    const piDown = !connection.pi_ok
+  const pay = async () => {
+    if (busy) return // synchronous guard against double-tap
+    setBusy(true)
+    setError(null)
+    const res = await placeOrder(method!)
+    setBusy(false)
+    if (!res.ok) {
+      setError(res.error)
+      return
+    }
+    // Reset attempt keys for the next customer.
+    attemptRef.current = freshAttempt()
+    setMethod(null)
+    onExpandedChange(false)
+    onDone()
+  }
+
+  if (priced.items.length === 0) return null
+
+  const cornerCls = corner === "br" ? "right-3" : "left-3"
+  const piDown = !connection.pi_ok
+
+  // Collapsed: a single corner pill. Tapping expands in place.
+  if (!expanded) {
     return (
-      <>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Hoe afrekenen?</h2>
-          <button onClick={onBack} className="text-sm opacity-70 underline">
-            Terug
-          </button>
-        </div>
-        {piDown ? (
-          <div
-            role="alert"
-            className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900"
-          >
-            Pi-bridge offline — cash-modus actief. PIN beschikbaar zodra
-            de bridge weer bereikbaar is.
-          </div>
-        ) : null}
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <MethodCard
-            label="Contant"
-            sub="Cash + bon"
-            onClick={() => setMethod("cash")}
-          />
-          <MethodCard
-            label="PIN"
-            sub={piDown ? "Pi-bridge offline" : "myPOS terminal"}
-            disabled={piDown}
-            onClick={() => setMethod("pin")}
-          />
-        </div>
-        {error ? (
-          <p className="mt-3 text-sm text-red-700" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </>
+      <button
+        onClick={() => onExpandedChange(true)}
+        className={`fixed bottom-28 ${cornerCls} z-30 min-h-[64px] rounded-2xl bg-[var(--color-brand)] px-5 text-lg font-semibold text-white shadow-xl active:scale-[0.98]`}
+      >
+        Afrekenen — €{(priced.total_incl_cents / 100).toFixed(2)}
+      </button>
     )
   }
 
-  const commonProps = {
-    priced,
-    busy,
-    onPay: async () => {
-      if (busy) return // synchronous guard against double-tap
-      setBusy(true)
-      setError(null)
-      const res = await placeOrder(method)
-      setBusy(false)
-      if (!res.ok) {
-        setError(res.error)
-        return
-      }
-      // Reset attempt keys for the next customer.
-      attemptRef.current = freshAttempt()
-      onDone()
-    },
-    onBack: () => setMethod(null),
-  }
-
-  if (method === "cash") return <CheckoutCash {...commonProps} />
   return (
-    <CheckoutPin
-      {...commonProps}
-      venueAmount={priced.total_incl_cents}
-      // Pass the SAME order_id and pin_idempotency_key as the place-order
-      // path so the myPOS intent row binds to this attempt's order.
-      orderId={attemptRef.current.order_id}
-      pinIdempotencyKey={attemptRef.current.pin_idempotency_key}
-    />
+    <section
+      aria-label="Afrekenen"
+      className={`fixed bottom-3 ${cornerCls} z-30 flex max-h-[80dvh] w-[360px] max-w-[calc(100vw-1.5rem)] flex-col overflow-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-[var(--color-surface-fg)] shadow-2xl`}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">
+          {method === "cash" ? "Contant" : method === "pin" ? "PIN — myPOS" : "Afrekenen"}
+        </h2>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={moveCorner}
+            aria-label="Verplaats betaalvak"
+            title="Verplaats naar andere hoek"
+            className="text-sm opacity-60 hover:opacity-100"
+          >
+            {corner === "br" ? "◧" : "◨"}
+          </button>
+          <button onClick={collapse} className="text-sm opacity-70 underline">
+            Sluit
+          </button>
+        </div>
+      </div>
+
+      {method === null ? (
+        <>
+          {piDown ? (
+            <div
+              role="alert"
+              className="mb-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900"
+            >
+              Pi-bridge offline — cash-modus actief. PIN beschikbaar zodra de
+              bridge weer bereikbaar is.
+            </div>
+          ) : null}
+          <p className="mb-3 text-sm opacity-70">
+            Te betalen: <strong>€{(priced.total_incl_cents / 100).toFixed(2)}</strong>
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <MethodCard label="Contant" sub="Cash + bon" onClick={() => setMethod("cash")} />
+            <MethodCard
+              label="PIN"
+              sub={piDown ? "Pi-bridge offline" : "myPOS terminal"}
+              disabled={piDown}
+              onClick={() => setMethod("pin")}
+            />
+          </div>
+          {error ? (
+            <p className="mt-3 text-sm text-red-700" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </>
+      ) : method === "cash" ? (
+        <CheckoutCash
+          priced={priced}
+          busy={busy}
+          onPay={pay}
+          onBack={() => setMethod(null)}
+        />
+      ) : (
+        <CheckoutPin
+          priced={priced}
+          busy={busy}
+          onPay={pay}
+          onBack={() => setMethod(null)}
+          venueAmount={priced.total_incl_cents}
+          orderId={attemptRef.current.order_id}
+          pinIdempotencyKey={attemptRef.current.pin_idempotency_key}
+        />
+      )}
+    </section>
   )
 }
 
@@ -255,7 +320,7 @@ function MethodCard({
       onClick={onClick}
       disabled={disabled}
       aria-disabled={disabled}
-      className="min-h-[120px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+      className="min-h-[96px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
     >
       <div className="text-lg font-semibold">{label}</div>
       <div className="text-sm opacity-70">{sub}</div>

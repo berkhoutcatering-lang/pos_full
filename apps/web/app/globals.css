@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Explicit sources so utility detection is robust regardless of the
+   workspace root Next/Tailwind infers in this pnpm monorepo. */
+@source "../app/**/*.{ts,tsx}";
+@source "../components/**/*.{ts,tsx}";
+
 @theme {
   /* Default preset: hopbites — overridden at runtime by org_theme_settings */
   --color-brand: oklch(0.65 0.22 35);

@@ -13,20 +13,21 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "fastify": "^5.0.0",
+    "@electric-sql/pglite": "^0.2.0",
     "@fastify/cookie": "^11.0.0",
     "@fastify/cors": "^10.0.0",
     "@fastify/helmet": "^12.0.0",
     "@fastify/rate-limit": "^10.0.0",
-    "better-sqlite3": "^11.3.0",
-    "@electric-sql/pglite": "^0.2.0",
+    "@sentry/node": "^10.57.0",
     "@supabase/supabase-js": "^2.45.0",
-    "node-thermal-printer": "^4.4.4",
-    "mdns": "^2.7.2",
+    "better-sqlite3": "^11.3.0",
+    "fastify": "^5.0.0",
     "jose": "^5.9.0",
-    "ulid": "^2.4.0",
+    "mdns": "^2.7.2",
+    "node-thermal-printer": "^4.4.4",
     "pino": "^9.4.0",
     "pino-pretty": "^11.2.0",
+    "ulid": "^2.4.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

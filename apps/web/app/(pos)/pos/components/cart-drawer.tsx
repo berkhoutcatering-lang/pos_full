@@ -2,32 +2,33 @@
 import { useState } from "react"
 import type { CartAction, CartState } from "@/lib/pos/cart-reducer"
 import type { PricedCart } from "@/lib/pos/types"
-import { CheckoutPane } from "./checkout-pane"
 import { CartItemRow } from "./cart-item-row"
 
+// Cart-only review drawer. Payment is NOT handled here — tapping
+// "Afrekenen" hands off to the non-modal PaymentDock (see payment-dock.tsx)
+// so the product grid stays live while the customer pays.
 export function CartDrawer({
   open,
   onClose,
   cart,
   priced,
   dispatch,
-  claims,
+  onCheckout,
 }: {
   open: boolean
   onClose: () => void
   cart: CartState
   priced: PricedCart
   dispatch: React.Dispatch<CartAction>
-  claims: { orgId: string; venueId: string; role: string }
+  onCheckout: () => void
 }) {
-  const [phase, setPhase] = useState<"cart" | "checkout">("cart")
-
   if (!open) return null
 
   return (
     <div
       role="dialog"
       aria-modal="true"
+      aria-label="Bestelling"
       className="fixed inset-0 z-40 flex items-end bg-black/40"
       onClick={onClose}
     >
@@ -35,69 +36,52 @@ export function CartDrawer({
         onClick={(e) => e.stopPropagation()}
         className="max-h-[92dvh] w-full overflow-auto rounded-t-2xl bg-[var(--color-surface)] p-4 shadow-xl"
       >
-        {phase === "cart" ? (
-          <>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Bestelling</h2>
-              <button onClick={onClose} className="text-sm opacity-70 underline">
-                Sluit
-              </button>
-            </div>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Bestelling</h2>
+          <button onClick={onClose} className="text-sm opacity-70 underline">
+            Sluit
+          </button>
+        </div>
 
-            <input
-              value={cart.customer_name ?? ""}
-              onChange={(e) =>
-                dispatch({ type: "set_customer", name: e.target.value })
-              }
-              placeholder="Klantnaam (optioneel, bv. Jan)"
-              maxLength={64}
-              className="mb-3 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2"
+        <input
+          value={cart.customer_name ?? ""}
+          onChange={(e) => dispatch({ type: "set_customer", name: e.target.value })}
+          placeholder="Klantnaam (optioneel, bv. Jan)"
+          maxLength={64}
+          className="mb-3 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-2"
+        />
+
+        <div className="max-h-[55dvh] space-y-2 overflow-auto">
+          {priced.items.length === 0 ? (
+            <p className="p-4 text-sm opacity-70">Voeg producten toe om te beginnen.</p>
+          ) : (
+            priced.items.map((it) => (
+              <CartItemRow key={it.cart_line_id} item={it} dispatch={dispatch} />
+            ))
+          )}
+        </div>
+
+        <div className="mt-4 space-y-1 border-t border-[var(--color-border)] pt-4">
+          <Row label="Subtotaal" cents={priced.subtotal_cents} />
+          {priced.discount_cents > 0 ? (
+            <Row
+              label="Korting"
+              cents={-priced.discount_cents}
+              className="text-emerald-700"
             />
-
-            <div className="max-h-[55dvh] space-y-2 overflow-auto">
-              {priced.items.length === 0 ? (
-                <p className="p-4 text-sm opacity-70">
-                  Voeg producten toe om te beginnen.
-                </p>
-              ) : (
-                priced.items.map((it) => (
-                  <CartItemRow key={it.cart_line_id} item={it} dispatch={dispatch} />
-                ))
-              )}
-            </div>
-
-            <div className="mt-4 space-y-1 border-t border-[var(--color-border)] pt-4">
-              <Row label="Subtotaal" cents={priced.subtotal_cents} />
-              {priced.discount_cents > 0 ? (
-                <Row
-                  label="Korting"
-                  cents={-priced.discount_cents}
-                  className="text-emerald-700"
-                />
-              ) : null}
-              <BtwBreakdown priced={priced} />
-              <button
-                disabled={priced.items.length === 0}
-                onClick={() => setPhase("checkout")}
-                className="mt-3 min-h-[64px] w-full rounded-xl bg-[var(--color-brand)] p-3 text-lg font-semibold text-white disabled:opacity-40"
-              >
-                Afrekenen
-              </button>
-            </div>
-          </>
-        ) : (
-          <CheckoutPane
-            priced={priced}
-            cart={cart}
-            claims={claims}
-            onDone={() => {
-              dispatch({ type: "clear" })
-              setPhase("cart")
+          ) : null}
+          <BtwBreakdown priced={priced} />
+          <button
+            disabled={priced.items.length === 0}
+            onClick={() => {
               onClose()
+              onCheckout()
             }}
-            onBack={() => setPhase("cart")}
-          />
-        )}
+            className="mt-3 min-h-[64px] w-full rounded-xl bg-[var(--color-brand)] p-3 text-lg font-semibold text-white disabled:opacity-40"
+          >
+            Afrekenen
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -131,9 +115,7 @@ const BTW_LABELS: Record<string, { label: string; rate: number }> = {
 
 function BtwBreakdown({ priced }: { priced: PricedCart }) {
   const [open, setOpen] = useState(false)
-  const classes = Object.entries(priced.btw_breakdown).filter(
-    ([, b]) => b.incl > 0,
-  )
+  const classes = Object.entries(priced.btw_breakdown).filter(([, b]) => b.incl > 0)
   return (
     <details
       open={open}

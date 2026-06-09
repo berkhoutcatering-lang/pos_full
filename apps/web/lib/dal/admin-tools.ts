@@ -74,7 +74,10 @@ export async function get_top_items(
     string,
     { name: string; qty: number; revenue_cents: number }
   >()
-  for (const row of (data ?? []) as Array<{
+  // PostgREST returns the !inner embed as a single object at runtime, but
+  // supabase-js infers it as an array — cast through unknown (as elsewhere
+  // in the DAL) to assert the to-one shape we actually get.
+  for (const row of (data ?? []) as unknown as Array<{
     menu_item_id: string | null
     name: string
     qty: number

@@ -1,4 +1,5 @@
 import withPWAInit from "@ducanh2912/next-pwa"
+import { withSentryConfig } from "@sentry/nextjs"
 import type { NextConfig } from "next"
 
 const withPWA = withPWAInit({
@@ -7,6 +8,9 @@ const withPWA = withPWAInit({
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: false,
   disable: process.env.NODE_ENV === "development",
+  // Document fallback served by the SW when offline and the route was
+  // never cached. The page is precached at build (app/~offline/page.tsx).
+  fallbacks: { document: "/~offline" },
   workboxOptions: {
     runtimeCaching: [
       {
@@ -22,18 +26,16 @@ const withPWA = withPWAInit({
   },
 })
 
-// Round 3 P1-6 — Content-Security-Policy. The PWA pulls scripts from
-// itself (and Turnstile on /q), connects to Supabase, the Pi-bridge over
-// LAN, and Mollie redirect/check URLs. report-to Sentry for violations.
-// Nonce-based on inline scripts via Next's built-in nonce middleware
-// (omitted here for brevity — wire when Sentry endpoint is provisioned).
+// Content-Security-Policy. The PWA loads scripts from itself, connects to
+// Supabase (REST + Realtime websocket), the Pi-bridge over LAN, and Sentry
+// ingest for error/perf reporting.
 const CSP_DIRECTIVES = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.supabase.co",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://hopbites.local:3001",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://hopbites.local:3001 https://*.sentry.io",
   "frame-ancestors 'self'",
   "form-action 'self'",
   "base-uri 'self'",
@@ -42,10 +44,13 @@ const CSP_DIRECTIVES = [
 ].join("; ")
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
-  experimental: {
-    typedRoutes: true,
-  },
+  // NOTE: cacheComponents is intentionally OFF. The app renders every
+  // route dynamically (force-dynamic everywhere) because it reads
+  // per-request, per-tenant data under RLS — enabling Cache Components
+  // here both breaks the build (incompatible with route-segment configs)
+  // and risks caching one tenant's data for another. Revisit only with a
+  // deliberate, per-tenant-keyed caching design.
+  typedRoutes: true,
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }],
@@ -67,4 +72,12 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default withPWA(nextConfig)
+// next-pwa (webpack) wraps innermost; Sentry wraps the result and uploads
+// source maps only when SENTRY_AUTH_TOKEN + org/project are present (CI /
+// prod build). Silent locally so dev builds stay quiet.
+export default withSentryConfig(withPWA(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+})

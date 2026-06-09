@@ -1,3 +1,5 @@
+import "./instrument.js" // MUST be first — sets up Sentry instrumentation
+import * as Sentry from "@sentry/node"
 import Fastify from "fastify"
 import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
@@ -69,6 +71,9 @@ await app.register(orderRoutes)
 await app.register(printRoutes)
 await app.register(cacheRoutes)
 await app.register(adminOperationalRoutes)
+
+// Capture unhandled route errors to Sentry (no-op without DSN).
+Sentry.setupFastifyErrorHandler(app)
 
 startOutboxFlushWorker()
 startPgliteWarmer()

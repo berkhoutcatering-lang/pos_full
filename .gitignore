@@ -34,3 +34,7 @@ apps/web/public/sw.js
 apps/web/public/sw.js.map
 apps/web/public/workbox-*.js
 apps/web/public/workbox-*.js.map
+
+# TypeScript / Next generated
+*.tsbuildinfo
+next-env.d.ts

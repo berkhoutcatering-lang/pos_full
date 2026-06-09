@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import type { Route } from "next"
 import Link from "next/link"
 import { requireRole } from "@/lib/dal/auth"
 import { ConnectionChip } from "@/components/connection-chip"
@@ -64,7 +65,7 @@ function NavLink({
   children,
   offlineCapable = false,
 }: {
-  href: string
+  href: Route
   children: ReactNode
   offlineCapable?: boolean
 }) {

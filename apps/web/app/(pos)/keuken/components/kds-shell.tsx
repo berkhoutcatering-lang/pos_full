@@ -210,8 +210,13 @@ export function KdsShell({
       }
 
       const p = (async () => {
+        // Bumping to "served" takes the card off the KDS; the other
+        // transitions just recolour it. Filtering also keeps the optimistic
+        // update within ActiveOrder["status"] (which has no "served").
         setOrders((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: toStatus } : o)),
+          toStatus === "served"
+            ? prev.filter((o) => o.id !== orderId)
+            : prev.map((o) => (o.id === orderId ? { ...o, status: toStatus } : o)),
         )
         const pi = await updateOrderStateViaPi({
           idempotency_key,

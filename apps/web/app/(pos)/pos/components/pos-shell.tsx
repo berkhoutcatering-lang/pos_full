@@ -7,6 +7,7 @@ import type { MenuItem, MenuSnapshot, ModifierGroup } from "@/lib/pos/types"
 import { ProductGrid } from "./product-grid"
 import { CategoryTabs } from "./category-tabs"
 import { CartDrawer } from "./cart-drawer"
+import { PaymentDock } from "./payment-dock"
 import { ModifierPicker } from "./modifier-picker"
 import { ProductSearch } from "./product-search"
 import { ConnectionChip } from "@/components/connection-chip"
@@ -92,6 +93,7 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
   )
   const [category, setCategory] = useState<string>(categories[0] ?? "")
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [payExpanded, setPayExpanded] = useState(false)
   const [pickerFor, setPickerFor] = useState<MenuItem | null>(null)
 
   const priced = useMemo(
@@ -131,14 +133,16 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
           onAdd={handleAdd}
         />
       </div>
-      <button
-        onClick={() => setDrawerOpen(true)}
-        className="m-3 min-h-[88px] rounded-xl bg-[var(--color-brand)] p-4 text-xl font-semibold text-white shadow-lg active:scale-[0.98]"
-      >
-        Bekijk bestelling — {cart.items.length}{" "}
-        {cart.items.length === 1 ? "item" : "items"} — €
-        {(priced.total_incl_cents / 100).toFixed(2)}
-      </button>
+      {!payExpanded ? (
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="m-3 min-h-[88px] rounded-xl bg-[var(--color-brand)] p-4 text-xl font-semibold text-white shadow-lg active:scale-[0.98]"
+        >
+          Bekijk bestelling — {cart.items.length}{" "}
+          {cart.items.length === 1 ? "item" : "items"} — €
+          {(priced.total_incl_cents / 100).toFixed(2)}
+        </button>
+      ) : null}
 
       <CartDrawer
         open={drawerOpen}
@@ -146,7 +150,16 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
         cart={cart}
         priced={priced}
         dispatch={dispatch}
+        onCheckout={() => setPayExpanded(true)}
+      />
+
+      <PaymentDock
+        priced={priced}
+        cart={cart}
         claims={claims}
+        expanded={payExpanded}
+        onExpandedChange={setPayExpanded}
+        onDone={() => dispatch({ type: "clear" })}
       />
 
       <ProductSearch items={menu.items} onPick={handleAdd} />
