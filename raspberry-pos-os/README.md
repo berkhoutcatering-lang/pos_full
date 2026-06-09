@@ -79,6 +79,11 @@ herstart de Pi.
 
 - SSH: `ssh hopbites@hopbites.local` — wachtwoord = `POS_OS_PASSWORD` bij de
   build (default `hopbites2026`, **wijzig dit**).
+- **Raspberry Pi Connect** (remote shell via de browser, ook buiten je eigen
+  netwerk): zet `ENABLE_RPI_CONNECT=1` in `pos.env`, herstart, en koppel
+  eenmalig via SSH met `rpi-connect signin` (Raspberry Pi ID nodig). Daarna
+  bereikbaar op https://connect.raspberrypi.com. Let op: alleen shell-toegang;
+  screen sharing vereist een desktop en zit niet in dit Lite-image.
 - Logs: `journalctl -u pi-bridge -f`, provisioning: `journalctl -u pos-provision`.
 - Health: `curl -k https://hopbites.local:3001/_health`.
 - Config geweigerd? De service start bewust niet zolang `pos.env` ongeldig is —

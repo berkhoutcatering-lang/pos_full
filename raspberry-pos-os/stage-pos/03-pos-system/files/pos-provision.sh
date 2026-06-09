@@ -44,6 +44,7 @@ MYPOS_BASE="https://eposapi.mypos.com"
 PRINTER_NETWORK_ADDR="192.168.1.50" PRINTER_TYPE="star"
 POS_HOSTNAME="hopbites" WIFI_SSID="" WIFI_PASS="" WIFI_COUNTRY="NL"
 KIOSK_URL="" ALLOWED_ORIGINS="" MDNS_INTERFACE="" SENTRY_DSN=""
+ENABLE_RPI_CONNECT="0"
 set -a
 # shellcheck disable=SC1090
 . "${CLEAN}"
@@ -189,6 +190,23 @@ else
   systemctl enable --now getty@tty1.service >/dev/null 2>&1
 fi
 
+# ---------- 7b. Raspberry Pi Connect (remote shell) ----------
+POS_USER=hopbites
+if id "${POS_USER}" >/dev/null 2>&1 && command -v rpi-connect >/dev/null 2>&1; then
+  PUID=$(id -u "${POS_USER}")
+  RUNUSER=(runuser -u "${POS_USER}" -- env "XDG_RUNTIME_DIR=/run/user/${PUID}" \
+    "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${PUID}/bus")
+  if [ "${ENABLE_RPI_CONNECT}" = "1" ]; then
+    loginctl enable-linger "${POS_USER}" 2>/dev/null
+    systemctl start "user@${PUID}.service" 2>/dev/null
+    "${RUNUSER[@]}" systemctl --user enable rpi-connect.service >/dev/null 2>&1 \
+      || WARNINGS+=("rpi-connect service kon niet ge-enabled worden — check 'systemctl --user status rpi-connect' als ${POS_USER}")
+    "${RUNUSER[@]}" systemctl --user start rpi-connect.service >/dev/null 2>&1
+  else
+    "${RUNUSER[@]}" systemctl --user disable --now rpi-connect.service >/dev/null 2>&1
+  fi
+fi
+
 # ---------- 8. STATUS.txt ----------
 FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)
 {
@@ -208,6 +226,11 @@ FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/n
   echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo geconfigureerd || echo 'NIET geconfigureerd')"
   echo "Printer:      ${PRINTER_TYPE} @ ${PRINTER_NETWORK_ADDR}"
   echo "Kiosk:        ${KIOSK_URL:-uit}"
+  if [ "${ENABLE_RPI_CONNECT}" = "1" ]; then
+    echo "Pi Connect:   aan — eenmalig koppelen: ssh ${POS_USER}@${HN}.local en dan 'rpi-connect signin'"
+  else
+    echo "Pi Connect:   uit (ENABLE_RPI_CONNECT=1 in pos.env om aan te zetten)"
+  fi
   echo
   echo "TLS-certificaat (SHA256): ${FP:-n.v.t.}"
   echo "Installeer 'hopbites-ca.crt' (in deze map) op elke tablet zodat"
