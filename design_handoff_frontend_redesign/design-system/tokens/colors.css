@@ -1,0 +1,74 @@
+/* Hop & Bites — Colour tokens
+ * System: warm OFFWHITE surfaces, ANTRACIET (charcoal) ink & chrome,
+ * fresh HOP GREEN as the single action accent. High contrast, flat.
+ * BBQ-brick red is the only other hue, reserved for destructive actions. */
+:root {
+  /* ---- Base ramps ---- */
+
+  /* Offwhite / paper surfaces (warm, low-glare for a busy service) */
+  --offwhite:    #F4F1E8;  /* app background */
+  --paper:       #FBF9F2;  /* receipt panel, raised tiles */
+  --paper-bright:#FFFFFF;  /* product tiles, inputs */
+
+  /* Antraciet (charcoal) — slightly green-tinted neutral */
+  --charcoal-900:#1B201D;  /* top bar, primary ink */
+  --charcoal-800:#272D29;
+  --charcoal-700:#363D38;
+  --charcoal-600:#4C544E;
+  --charcoal-500:#697069;  /* muted / secondary ink */
+  --charcoal-400:#8C9289;  /* placeholder */
+  --charcoal-300:#B6BAB0;  /* disabled ink */
+
+  /* Hop green — the action accent */
+  --hop-800:#234E31;
+  --hop-700:#2B6440;
+  --hop-600:#34794D;  /* primary button */
+  --hop-500:#3F9159;  /* hover / lighter */
+  --hop-300:#9BC8A6;
+  --hop-100:#DCEBDD;  /* active category tint, selected line */
+  --hop-50: #EDF4EC;  /* subtle hop wash */
+
+  /* BBQ brick — destructive only */
+  --brick-700:#9E392C;
+  --brick-600:#B64536;  /* retour / annuleren */
+  --brick-100:#F4E0DB;
+
+  /* Ember amber — discount / attention highlight */
+  --amber-600:#C2851C;
+  --amber-100:#F6E9CC;
+
+  /* Hairlines & dividers (warm grey, derived from offwhite) */
+  --line:        #E3DECF;  /* default border */
+  --line-strong: #D2CBB6;  /* emphasised divider */
+  --line-soft:   #ECE8DC;
+
+  /* ---- Semantic aliases ---- */
+  --bg-app:        var(--offwhite);
+  --bg-receipt:    var(--paper);
+  --bg-tile:       var(--paper-bright);
+  --bg-topbar:     var(--charcoal-900);
+
+  --text-strong:   var(--charcoal-900);
+  --text-body:     var(--charcoal-800);
+  --text-muted:    var(--charcoal-500);
+  --text-disabled: var(--charcoal-300);
+  --text-on-dark:  var(--offwhite);
+  --text-on-accent:#FBF9F2;
+
+  --accent:        var(--hop-600);
+  --accent-hover:  var(--hop-700);
+  --accent-tint:   var(--hop-100);
+  --accent-wash:   var(--hop-50);
+
+  --danger:        var(--brick-600);
+  --danger-tint:   var(--brick-100);
+  --highlight:     var(--amber-600);
+  --highlight-tint:var(--amber-100);
+
+  --border:        var(--line);
+  --border-strong: var(--line-strong);
+  --border-soft:   var(--line-soft);
+
+  /* Focus ring for touch/keyboard */
+  --focus-ring: 0 0 0 3px var(--hop-300);
+}

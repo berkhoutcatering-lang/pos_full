@@ -1,0 +1,21 @@
+/* Hop & Bites — Elevation & borders
+ * Deliberately FLAT. No heavy drop shadows. Depth comes from hairline
+ * borders and the offwhite/paper surface contrast. A POS is read at a
+ * glance under bright light — crisp edges beat soft glows. */
+:root {
+  /* Borders */
+  --border-width: 1px;
+  --border-width-strong: 2px;
+
+  /* Shadows — used sparingly. The receipt panel and pressed tiles only. */
+  --shadow-none: none;
+  --shadow-hairline: 0 1px 0 rgba(27, 32, 29, 0.04);
+  --shadow-panel:    -1px 0 0 var(--line-strong);            /* receipt seam */
+  --shadow-raised:   0 2px 6px rgba(27, 32, 29, 0.06);       /* dialogs only */
+  --shadow-pressed:  inset 0 2px 4px rgba(27, 32, 29, 0.12); /* active tile */
+
+  /* Motion — quick and functional, no bounce */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
+  --dur-fast: 90ms; /* @kind other */
+  --dur-base: 150ms; /* @kind other */
+}

@@ -1,16 +1,25 @@
 "use client"
 import { useEffect, useState } from "react"
+import { Clock } from "lucide-react"
 import type { ActiveOrder } from "@/lib/dal/active-orders"
-import { AGE_CLASSES, ageOf, formatAge } from "@/lib/pos/order-age"
+import { AGE_TEXT_CLASSES, ageOf, formatAge } from "@/lib/pos/order-age"
+import { cn } from "@/lib/cn"
 
+/** KDS order card: white, hairline border, 6px left stripe + full-width
+ *  bump button in the column's status color. Ages live (1s tick). */
 export function OrderCard({
   order,
   onBump,
   nextLabel,
+  nextIcon,
+  accent,
 }: {
   order: ActiveOrder
   onBump: () => void
   nextLabel: string
+  nextIcon?: React.ReactNode
+  /** Column status color (CSS value) for stripe + bump button. */
+  accent: string
 }) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -23,43 +32,68 @@ export function OrderCard({
 
   return (
     <article
-      className={`flex flex-col gap-2 rounded-xl border-2 p-3 text-[var(--color-surface-fg)] ${AGE_CLASSES[bucket]}`}
+      className="flex flex-col overflow-hidden rounded-lg border border-line-strong bg-paper-bright"
+      style={{ borderLeft: `6px solid ${accent}` }}
       data-test="order-card"
     >
-      <header className="flex items-baseline justify-between">
-        <h3 className="text-lg font-bold">{order.ordered_label ?? "#"}</h3>
-        <span className="text-sm tabular-nums">{ageText}</span>
+      <header className="flex items-center justify-between border-b border-line px-4 py-3">
+        <div className="flex items-baseline gap-2.5">
+          <span className="hb-tabular text-[24px] font-extrabold leading-none text-charcoal-900">
+            {order.ordered_label ?? "#"}
+          </span>
+          {order.customer_name ? (
+            <span className="text-[15px] font-semibold leading-none text-charcoal-500">
+              {order.customer_name}
+            </span>
+          ) : null}
+        </div>
+        <span
+          className={cn(
+            "hb-tabular inline-flex items-center gap-1.5 text-[16px] font-extrabold leading-none",
+            AGE_TEXT_CLASSES[bucket]
+          )}
+        >
+          <Clock size={15} /> {ageText}
+        </span>
       </header>
-      {order.customer_name ? (
-        <p className="text-sm font-medium">Klant {order.customer_name}</p>
-      ) : null}
-      <ul className="text-sm">
+
+      <div className="flex flex-col gap-2.5 px-4 py-3">
         {order.items.map((it) => {
           const mods = Array.isArray(it.modifiers_json)
             ? (it.modifiers_json as Array<{ name: string }>)
             : []
           return (
-            <li key={it.id} className="mb-1">
-              <span className="font-semibold">{it.qty}×</span> {it.name}
-              {mods.length > 0 ? (
-                <ul className="ml-5 list-disc text-xs opacity-80">
-                  {mods.map((m, i) => (
-                    <li key={i}>{m.name}</li>
-                  ))}
-                </ul>
-              ) : null}
-              {it.notes ? (
-                <p className="ml-5 text-xs italic opacity-80">! {it.notes}</p>
-              ) : null}
-            </li>
+            <div key={it.id} className="flex items-start gap-2.5">
+              <span className="hb-tabular min-w-7 flex-none text-[18px] font-extrabold leading-[1.25] text-hop-700">
+                {it.qty}×
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[18px] font-bold leading-[1.25] text-charcoal-900">
+                  {it.name}
+                </div>
+                {mods.length > 0 ? (
+                  <div className="mt-1 text-[14px] font-semibold leading-[1.3] text-charcoal-500">
+                    + {mods.map((m) => m.name).join(", ")}
+                  </div>
+                ) : null}
+                {it.notes ? (
+                  <div className="mt-1 text-[14px] font-semibold italic leading-[1.3] text-charcoal-500">
+                    ! {it.notes}
+                  </div>
+                ) : null}
+              </div>
+            </div>
           )
         })}
-      </ul>
+      </div>
+
       <button
+        type="button"
         onClick={onBump}
-        className="mt-1 min-h-[88px] rounded-xl bg-[var(--color-brand)] text-lg font-semibold text-white active:scale-[0.98]"
+        className="m-3 mt-1 flex h-16 items-center justify-center gap-2.5 rounded-md text-[18px] font-extrabold leading-none text-white transition-transform duration-[var(--dur-fast)] active:scale-[0.98]"
+        style={{ background: accent }}
       >
-        {nextLabel}
+        {nextIcon} {nextLabel}
       </button>
     </article>
   )

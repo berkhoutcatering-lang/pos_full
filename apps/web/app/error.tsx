@@ -31,7 +31,7 @@ export default function Error({
         ) : null}
         <button
           onClick={reset}
-          className="mt-4 min-h-[56px] rounded-xl bg-[var(--color-brand)] px-6 font-semibold text-white active:scale-[0.98]"
+          className="mt-4 min-h-[56px] rounded-md bg-hop-600 px-6 font-bold text-white transition-[background] duration-[var(--dur-fast)] hover:bg-hop-700 active:scale-[0.98]"
         >
           Opnieuw proberen
         </button>

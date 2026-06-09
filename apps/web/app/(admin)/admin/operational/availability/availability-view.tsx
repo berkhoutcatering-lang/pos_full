@@ -1,8 +1,14 @@
 "use client"
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { supabase } from "@/lib/supabase/client"
 import type { OperationalItem } from "@/lib/dal/operational-items"
 import { toggleAvailabilityAction } from "@/lib/dal/admin-operational"
+import { accentForCategory, labelForCategory } from "@/lib/pos/menu-groups"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Toggle } from "@/components/admin/toggle"
+import { euroCents } from "@/lib/format"
+import { cn } from "@/lib/cn"
 
 export function AvailabilityView({
   initial,
@@ -82,55 +88,90 @@ export function AvailabilityView({
     })
   }
 
+  const byCategory = useMemo(
+    () =>
+      items.reduce<Record<string, OperationalItem[]>>((acc, it) => {
+        ;(acc[it.category] ??= []).push(it)
+        return acc
+      }, {}),
+    [items],
+  )
+  const categories = Object.keys(byCategory)
+  const offCount = items.filter((i) => i.is_available_override === false).length
+  const outCount = items.filter((i) => i.stock_qty !== null && i.stock_qty <= 0).length
+
   return (
-    <>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm opacity-60">
-          {items.filter((i) => i.is_available_override === false).length}× uitgezet,{" "}
-          {items.filter((i) => i.stock_qty === 0).length}× op.
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <p className="hb-tabular text-[14px] font-semibold leading-none text-charcoal-500">
+          {offCount}× uitgezet · {outCount}× op
         </p>
-        <button
-          onClick={resetAll}
-          disabled={pending}
-          className="rounded border border-[var(--color-border)] px-3 py-2 text-sm hover:bg-[color-mix(in_oklch,var(--color-accent)_15%,transparent)]"
-        >
+        <Button variant="secondary" size="sm" onClick={resetAll} disabled={pending}>
           Alles weer aan
-        </button>
+        </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-        {items.map((it) => {
-          const isOut = it.stock_qty !== null && it.stock_qty <= 0
-          const isManagerOff = it.is_available_override === false
-          const cls = isOut
-            ? "border-red-500 bg-red-50"
-            : isManagerOff
-              ? "border-amber-500 bg-amber-50"
-              : "border-[var(--color-border)] bg-[var(--color-surface)]"
-          return (
-            <button
-              key={it.id}
-              onClick={() => toggle(it)}
-              className={`relative flex min-h-[88px] flex-col justify-between rounded-xl border-2 p-3 text-left ${cls}`}
-              data-testid="availability-card"
-            >
-              <span className="line-clamp-2 font-medium leading-tight">{it.name}</span>
-              <span className="text-sm font-semibold">
-                €{(it.effective_price_cents / 100).toFixed(2)}
+      <div className="flex flex-col gap-7">
+        {categories.map((cat) => (
+          <section key={cat}>
+            <div className="mb-3 flex items-center gap-2.5">
+              <span
+                className="h-3 w-3 rounded-[3px]"
+                style={{ background: accentForCategory(cat, categories.indexOf(cat)) }}
+              />
+              <span className="text-[17px] font-extrabold leading-none text-charcoal-900">
+                {labelForCategory(cat)}
               </span>
-              {isOut ? (
-                <span className="absolute right-2 top-2 rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">
-                  OP
-                </span>
-              ) : isManagerOff ? (
-                <span className="absolute right-2 top-2 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">
-                  UIT
-                </span>
-              ) : null}
-            </button>
-          )
-        })}
+            </div>
+            <div className="overflow-hidden rounded-lg border border-line-strong bg-paper-bright">
+              {byCategory[cat]!.map((it, i) => {
+                const isOut = it.stock_qty !== null && it.stock_qty <= 0
+                const isOn = it.is_available_override !== false
+                return (
+                  <div
+                    key={it.id}
+                    data-testid="availability-card"
+                    className={cn(
+                      "flex items-center gap-4 px-5 py-3.5",
+                      i > 0 && "border-t border-line",
+                      (!isOn || isOut) && "opacity-55"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[16px] font-bold leading-none text-charcoal-900">
+                        {it.name}
+                      </div>
+                      {it.stock_qty !== null ? (
+                        <div className="hb-tabular mt-1 text-[13px] font-medium leading-none text-charcoal-500">
+                          {it.stock_qty} op voorraad
+                        </div>
+                      ) : null}
+                    </div>
+                    {isOut ? (
+                      <Badge variant="danger" size="sm">
+                        Uitverkocht
+                      </Badge>
+                    ) : !isOn ? (
+                      <Badge variant="amber" size="sm">
+                        Uit
+                      </Badge>
+                    ) : null}
+                    <span className="hb-tabular min-w-[78px] text-right text-[16px] font-bold leading-none text-charcoal-900">
+                      {euroCents(it.effective_price_cents)}
+                    </span>
+                    <Toggle
+                      on={isOn}
+                      onChange={() => toggle(it)}
+                      label={`${it.name} ${isOn ? "uitzetten" : "aanzetten"}`}
+                      disabled={pending}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        ))}
       </div>
-    </>
+    </div>
   )
 }

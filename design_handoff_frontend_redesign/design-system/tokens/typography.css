@@ -1,0 +1,42 @@
+/* Hop & Bites — Typography tokens
+ * One family (Hanken Grotesk), used at functional sizes for a touch POS.
+ * Numbers everywhere use tabular figures so prices/totals never jitter. */
+:root {
+  /* ---- Type scale (px, tuned for a 1920×1080 kassascherm) ---- */
+  --text-2xs:  12px;  /* micro labels, tags */
+  --text-xs:   14px;  /* meta, captions */
+  --text-sm:   16px;  /* secondary UI text */
+  --text-base: 18px;  /* body / order lines */
+  --text-md:   20px;  /* product names */
+  --text-lg:   24px;  /* prices, section heads */
+  --text-xl:   30px;  /* totals secondary */
+  --text-2xl:  40px;  /* grand total */
+  --text-3xl:  52px;  /* hero / logo lockup */
+
+  /* ---- Weights ---- */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold:600;
+  --weight-bold:    700;
+  --weight-black:   800;
+
+  /* ---- Line heights ---- */
+  --leading-tight:  1.05;
+  --leading-snug:   1.2;
+  --leading-normal: 1.4;
+
+  /* ---- Tracking ---- */
+  --tracking-tight:  -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;  /* eyebrows / category caps */
+  --tracking-wider:  0.12em;  /* tiny all-caps labels */
+
+  /* ---- Numeric feature: tabular, lining figures ---- */
+  --numeric-features: "tnum" 1, "lnum" 1, "cv05" 1; /* @kind other */
+}
+
+/* Utility: opt any price/quantity element into tabular figures. */
+.hb-tabular {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: var(--numeric-features);
+}

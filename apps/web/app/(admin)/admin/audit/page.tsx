@@ -1,5 +1,6 @@
 import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { createClient } from "@/lib/supabase/server"
+import { PageHead } from "@/components/admin/page-head"
 import { AuditView } from "./audit-view"
 
 export const dynamic = "force-dynamic"
@@ -35,7 +36,11 @@ export default async function AuditPage() {
   }))
   return (
     <section>
-      <h2 className="mb-4 text-2xl font-bold">Audit log</h2>
+      <PageHead
+        eyebrow="Beheer"
+        title="Audit log"
+        sub="Onveranderlijk logboek met SBA Fase 4 hash-chain — prijs-, retour- en beschikbaarheidsacties."
+      />
       <AuditView rows={rows} orgId={claims.orgId} />
     </section>
   )

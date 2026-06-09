@@ -52,15 +52,15 @@ export function HashChainBadge() {
 
   const cls =
     state === "intact"
-      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+      ? "border-hop-300 bg-hop-50 text-hop-800"
       : state === "broken"
-        ? "border-red-400 bg-red-50 text-red-800"
-        : "border-[var(--color-border)] bg-[var(--color-surface)] opacity-60"
+        ? "border-brick-600 bg-brick-100 text-brick-700"
+        : "border-line-strong bg-paper-bright text-charcoal-500"
 
   return (
     <span
       role="status"
-      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs ${cls}`}
+      className={`hb-tabular inline-flex min-h-[26px] items-center rounded-sm border px-2.5 py-1 text-[13px] font-bold leading-none ${cls}`}
       title={data?.reason ?? state}
     >
       {label}

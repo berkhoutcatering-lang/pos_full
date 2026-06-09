@@ -5,24 +5,27 @@ import {
   useConnectionStatus,
   type ConnectionState,
 } from "@/lib/pos/connection-status"
+import { cn } from "@/lib/cn"
 
 const LABEL: Record<ConnectionState, string> = {
-  live: "● live",
-  connecting: "○ verbinden…",
-  pi_only: "⚡ Pi-only",
-  outage: "⚠️ outage",
-  offline: "⛔ offline",
+  live: "Live",
+  connecting: "Verbinden…",
+  pi_only: "Pi-only",
+  outage: "Outage",
+  offline: "Offline",
 }
 
-const STYLE: Record<ConnectionState, string> = {
-  live: "bg-emerald-50 text-emerald-800 border-emerald-300",
-  connecting: "bg-amber-50 text-amber-800 border-amber-300",
-  pi_only: "bg-blue-50 text-blue-800 border-blue-300",
-  outage: "bg-red-50 text-red-800 border-red-300 animate-pulse motion-reduce:animate-none",
-  offline: "bg-red-100 text-red-900 border-red-500",
+const DOT: Record<ConnectionState, string> = {
+  live: "bg-hop-500",
+  connecting: "bg-amber-600",
+  pi_only: "bg-hop-300",
+  outage: "bg-brick-600 animate-pulse motion-reduce:animate-none",
+  offline: "bg-brick-600",
 }
 
-export function ConnectionChip() {
+/** Chrome status chip. Designed for the charcoal top bars; `onLight`
+ *  flips it for offwhite surfaces (admin topline). */
+export function ConnectionChip({ onLight = false }: { onLight?: boolean }) {
   const state = useConnectionStatus((s) => s.state)
   const queued = useConnectionStatus((s) => s.queued_count)
 
@@ -31,17 +34,24 @@ export function ConnectionChip() {
     return stop
   }, [])
 
-  const label = state === "outage" || state === "offline"
-    ? `${LABEL[state]} · ${queued} queued`
-    : LABEL[state]
+  const label =
+    state === "outage" || state === "offline"
+      ? `${LABEL[state]} · ${queued} in wachtrij`
+      : LABEL[state]
 
   return (
     <div
       role="status"
       aria-live="polite"
       title={`Verbindingsstatus: ${state}`}
-      className={`inline-flex h-9 min-w-[88px] items-center justify-center rounded-full border px-3 text-xs font-medium ${STYLE[state]}`}
+      className={cn(
+        "inline-flex h-9 items-center gap-2 rounded-md border px-3 text-[14px] font-bold leading-none",
+        onLight
+          ? "border-line-strong bg-paper-bright text-charcoal-800"
+          : "border-charcoal-700 bg-transparent text-charcoal-300"
+      )}
     >
+      <span className={cn("h-[9px] w-[9px] rounded-full", DOT[state])} />
       {label}
     </div>
   )

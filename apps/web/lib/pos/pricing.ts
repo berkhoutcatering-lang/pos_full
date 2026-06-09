@@ -23,6 +23,9 @@ export function priceCart(
   items: CartItem[],
   combos: ComboDef[],
   staffels: StaffelDef[],
+  /** Operator-applied bon-korting (Korting key), 0–100. Distributed per
+   *  discountable line so the BTW split stays correct. */
+  manualDiscountPct = 0,
 ): PricedCart {
   const linesBase: LineBase[] = items.map((it) => {
     const modSumPerUnit = it.selected_modifiers.reduce(
@@ -76,6 +79,17 @@ export function priceCart(
       remaining -= share
       lineDiscounts.set(lid, (lineDiscounts.get(lid) ?? 0) + share)
     })
+  }
+
+  if (manualDiscountPct > 0) {
+    const pct = Math.min(100, manualDiscountPct)
+    for (const l of linesBase) {
+      if (!l.menu_item.is_discountable) continue
+      const already = lineDiscounts.get(l.cart_line_id) ?? 0
+      const base = Math.max(0, l.line_incl_pre_disc - already)
+      const extra = Math.round((base * pct) / 100)
+      if (extra > 0) lineDiscounts.set(l.cart_line_id, already + extra)
+    }
   }
 
   const pricedLines: PricedCartLine[] = linesBase.map((l) => {

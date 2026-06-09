@@ -1,6 +1,22 @@
 "use client"
 import { useState } from "react"
 import { setManagerPinAction } from "./actions"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+
+const ROLE_BADGE: Record<string, "accent" | "neutral" | "amber" | "dark"> = {
+  owner: "dark",
+  manager: "accent",
+  cashier: "neutral",
+  viewer: "amber",
+}
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Eigenaar",
+  manager: "Manager",
+  cashier: "Kassier",
+  viewer: "Keuken",
+}
 
 export function StaffView({
   rows,
@@ -40,44 +56,53 @@ export function StaffView({
 
   return (
     <>
-      <table className="mb-4 w-full text-sm">
-        <thead>
-          <tr className="border-b border-[var(--color-border)] text-left">
-            <th className="py-2">User ID</th>
-            <th>Rol</th>
-            <th>Aangemeld</th>
-            <th>Manager-PIN</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.user_id} className="border-b border-[var(--color-border)]">
-              <td className="py-2 font-mono text-xs">{r.user_id.slice(0, 8)}…</td>
-              <td>{r.role}</td>
-              <td className="opacity-70">
-                {new Date(r.created_at).toLocaleDateString("nl-NL")}
-              </td>
-              <td>{r.has_manager_pin ? "ingesteld" : "—"}</td>
-              <td>
-                {r.role === "manager" || r.role === "owner" ? (
-                  <button
-                    onClick={() => setEditFor(r.user_id)}
-                    className="text-sm underline"
-                  >
-                    PIN instellen
-                  </button>
-                ) : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-hidden rounded-lg border border-line-strong bg-paper-bright">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 border-b border-line px-5 py-3 text-[12px] font-bold uppercase leading-none tracking-[0.06em] text-charcoal-500">
+          <span>Naam</span>
+          <span>Rol</span>
+          <span>PIN</span>
+          <span>Status</span>
+          <span />
+        </div>
+        {rows.map((r, i) => (
+          <div
+            key={r.user_id}
+            className={`grid grid-cols-[2fr_1fr_1fr_1fr_auto] items-center gap-3 px-5 py-4 ${i > 0 ? "border-t border-line" : ""}`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-full bg-charcoal-800 text-[14px] font-bold uppercase leading-none text-white">
+                {r.user_id.slice(0, 2)}
+              </span>
+              <span className="hb-tabular truncate text-[15px] font-bold leading-none text-charcoal-900">
+                {r.user_id.slice(0, 8)}…
+              </span>
+            </div>
+            <span>
+              <Badge variant={ROLE_BADGE[r.role] ?? "neutral"} size="sm">
+                {ROLE_LABEL[r.role] ?? r.role}
+              </Badge>
+            </span>
+            <span className="text-[15px] font-semibold tracking-[0.2em] text-charcoal-500">
+              {r.has_manager_pin ? "••••" : "—"}
+            </span>
+            <span className="inline-flex items-center gap-2 text-[14px] font-semibold leading-none text-hop-700">
+              <span className="h-[9px] w-[9px] rounded-full bg-hop-500" /> Actief
+            </span>
+            <span>
+              {r.role === "manager" || r.role === "owner" ? (
+                <Button variant="secondary" size="sm" onClick={() => setEditFor(r.user_id)}>
+                  PIN instellen
+                </Button>
+              ) : null}
+            </span>
+          </div>
+        ))}
+      </div>
 
       {editFor ? (
-        <div className="rounded-xl border border-[var(--color-border)] p-4">
-          <h3 className="mb-2 font-semibold">
-            PIN voor {editFor.slice(0, 8)}…
+        <div className="mt-4 max-w-[460px] rounded-lg border border-line-strong bg-paper-bright p-6">
+          <h3 className="mb-3 text-[18px] font-extrabold leading-none text-charcoal-900">
+            Manager-PIN voor <span className="hb-tabular">{editFor.slice(0, 8)}…</span>
           </h3>
           <input
             inputMode="numeric"
@@ -85,30 +110,28 @@ export function StaffView({
             value={pin}
             onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
             placeholder="4-8 cijfers"
-            className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3 font-mono text-lg tracking-widest"
+            className="hb-tabular h-[60px] w-full rounded-md border border-line-strong bg-paper-bright px-[18px] text-[24px] font-bold tracking-[0.3em] text-charcoal-900 outline-none placeholder:text-[16px] placeholder:font-medium placeholder:tracking-normal placeholder:text-charcoal-400"
             autoComplete="new-password"
           />
-          <div className="mt-3 flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={busy}
-              className="rounded bg-[var(--color-brand)] px-4 py-2 font-semibold text-white disabled:opacity-40"
-            >
-              Opslaan
-            </button>
-            <button
+          <div className="mt-4 flex gap-3">
+            <Button variant="primary" onClick={handleSave} disabled={busy}>
+              {busy ? "Bezig…" : "Opslaan"}
+            </Button>
+            <Button
+              variant="ghost"
               onClick={() => {
                 setEditFor(null)
                 setPin("")
               }}
-              className="px-4 py-2 text-sm underline"
             >
               Annuleer
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
-      {msg ? <p className="mt-3 text-sm">{msg}</p> : null}
+      {msg ? (
+        <p className="mt-3 text-[14px] font-semibold text-charcoal-800">{msg}</p>
+      ) : null}
     </>
   )
 }

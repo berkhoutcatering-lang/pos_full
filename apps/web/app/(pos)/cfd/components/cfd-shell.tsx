@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
+import { BellRing, Check, Flame, ShoppingBag } from "lucide-react"
 import { subscribeToVenueOrders } from "@/lib/pos/realtime-subscribe"
 
 interface CfdOrder {
@@ -110,49 +111,95 @@ export function CfdShell({
       now - new Date(o.prepared_at ?? o.placed_at).getTime() < READY_WINDOW_MS,
   )
 
+  const clock = new Date(now).toLocaleTimeString("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+  const tag = (o: CfdOrder) => o.customer_name ?? o.ordered_label ?? "#"
+
   return (
-    <div
-      className="grid h-dvh grid-cols-1 bg-[var(--color-surface)] p-8 text-[var(--color-surface-fg)] md:grid-cols-2"
-      data-testid="cfd"
-    >
-      <section className="border-b-2 border-[var(--color-border)] pb-6 md:border-b-0 md:border-r-2 md:pb-0 md:pr-6">
-        <h2 className="mb-6 text-5xl font-bold tracking-tight">In bereiding</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          {preparing.length === 0 ? (
-            <p className="col-span-full text-2xl opacity-60">—</p>
-          ) : (
-            preparing.map((o) => (
-              <div
-                key={o.id}
-                className="rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-center text-3xl font-bold"
-              >
-                {o.customer_name ?? o.ordered_label ?? "#"}
-              </div>
-            ))
-          )}
+    <div className="flex h-dvh flex-col bg-charcoal-900 text-offwhite" data-testid="cfd">
+      {/* 110px header */}
+      <header className="flex h-[110px] flex-none items-center justify-between border-b border-charcoal-700 px-14">
+        <div className="whitespace-nowrap text-[34px] font-extrabold leading-[1.1] tracking-[-0.01em]">
+          Hop <span className="text-hop-500">&amp;</span> Bites
         </div>
-      </section>
-      <section className="pt-6 md:pl-6 md:pt-0">
-        <h2 className="mb-6 text-5xl font-bold tracking-tight text-emerald-700">
-          Klaar!
-        </h2>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {ready.length === 0 ? (
-            <p className="col-span-full text-2xl opacity-60">—</p>
-          ) : (
-            ready.map((o) => (
-              <div
-                key={o.id}
-                className="animate-pulse rounded-2xl bg-emerald-500 p-6 text-center text-4xl font-extrabold text-white shadow-lg"
-              >
-                {o.customer_name
-                  ? `Klant ${o.customer_name} — Klaar!`
-                  : `${o.ordered_label ?? "#"} — Klaar!`}
-              </div>
-            ))
-          )}
+        <div className="hidden text-[16px] font-bold uppercase leading-none tracking-[0.22em] text-charcoal-400 md:block">
+          Jouw bestelling · Live
         </div>
-      </section>
+        <div className="hb-tabular text-[36px] font-extrabold leading-none">{clock}</div>
+      </header>
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
+        {/* In bereiding */}
+        <section className="flex min-h-0 flex-col border-b border-charcoal-700 p-8 md:border-b-0 md:border-r md:p-12">
+          <h2 className="mb-9 flex items-center gap-4 whitespace-nowrap text-[44px] font-extrabold leading-[1.1] tracking-[-0.01em]">
+            <Flame size={40} className="text-amber-600" /> In bereiding
+          </h2>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid grid-cols-2 content-start gap-[18px] lg:grid-cols-3">
+              {preparing.length === 0 ? (
+                <p className="col-span-full text-[26px] font-semibold text-charcoal-400">
+                  —
+                </p>
+              ) : (
+                preparing.map((o) => (
+                  <div
+                    key={o.id}
+                    className="flex min-h-[132px] flex-col items-center justify-center gap-2 rounded-lg border border-charcoal-700 bg-charcoal-800 p-[18px]"
+                  >
+                    <span className="hb-tabular text-center text-[38px] font-extrabold leading-none">
+                      {tag(o)}
+                    </span>
+                    <span
+                      className={`text-[15px] font-semibold leading-none ${
+                        o.status === "preparing" ? "text-amber-600" : "text-charcoal-400"
+                      }`}
+                    >
+                      {o.status === "preparing" ? "Op de grill" : "In de wacht"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Klaar */}
+        <section className="flex min-h-0 flex-col p-8 md:p-12">
+          <h2 className="mb-9 flex items-center gap-4 whitespace-nowrap text-[44px] font-extrabold leading-[1.1] tracking-[-0.01em] text-hop-500">
+            <BellRing size={40} /> Klaar — kom afhalen!
+          </h2>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid grid-cols-1 content-start gap-[18px] lg:grid-cols-2">
+              {ready.length === 0 ? (
+                <p className="col-span-full text-[26px] font-semibold text-charcoal-400">
+                  —
+                </p>
+              ) : (
+                ready.map((o) => (
+                  <div
+                    key={o.id}
+                    className="hb-pulse flex min-h-[156px] flex-col items-center justify-center gap-2 rounded-xl bg-hop-600 p-[22px] text-white"
+                  >
+                    <span className="hb-tabular text-center text-[52px] font-black leading-none tracking-[-0.01em]">
+                      {tag(o)}
+                    </span>
+                    <span className="inline-flex items-center gap-2 text-[18px] font-bold leading-none text-white/90">
+                      <Check size={20} strokeWidth={3} /> Klaar
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer className="flex h-16 flex-none items-center justify-center gap-3 whitespace-nowrap border-t border-charcoal-700 text-[17px] font-semibold leading-none text-charcoal-300">
+        <ShoppingBag size={18} className="text-charcoal-400" /> Bedankt &amp; eet
+        smakelijk — Hop &amp; Bites BBQ
+      </footer>
     </div>
   )
 }

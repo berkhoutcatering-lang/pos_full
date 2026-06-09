@@ -1,6 +1,18 @@
 "use client"
 import { useState } from "react"
+import {
+  Play,
+  ReceiptText,
+  ScrollText,
+  ShieldCheck,
+  Tag,
+  ToggleLeft,
+  Undo2,
+  Wifi,
+} from "lucide-react"
 import { verifyChainAction } from "./actions"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/cn"
 
 interface Row {
   seq_id: number
@@ -10,9 +22,24 @@ interface Row {
   created_at: string
 }
 
-export function AuditView({ rows, orgId }: { rows: Row[]; orgId: string }) {
+// Icon + accent per event-type family.
+function eventMeta(type: string): { Icon: typeof Tag; color: string } {
+  if (/price/i.test(type)) return { Icon: Tag, color: "var(--color-amber-600)" }
+  if (/refund|void|retour/i.test(type))
+    return { Icon: Undo2, color: "var(--color-brick-600)" }
+  if (/avail|toggle|stock/i.test(type))
+    return { Icon: ToggleLeft, color: "var(--color-charcoal-600)" }
+  if (/bridge|device|pair/i.test(type))
+    return { Icon: Wifi, color: "var(--color-hop-600)" }
+  if (/close|z_report|day/i.test(type))
+    return { Icon: ReceiptText, color: "var(--color-hop-600)" }
+  if (/order|pay/i.test(type)) return { Icon: Play, color: "var(--color-hop-600)" }
+  return { Icon: ScrollText, color: "var(--color-charcoal-600)" }
+}
+
+export function AuditView({ rows, orgId: _orgId }: { rows: Row[]; orgId: string }) {
   const [verifying, setVerifying] = useState(false)
-  const [result, setResult] = useState<string | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
 
   const verify = async () => {
     setVerifying(true)
@@ -25,52 +52,83 @@ export function AuditView({ rows, orgId }: { rows: Row[]; orgId: string }) {
     // well as the chain-verify union — both have ok:false, so discriminate
     // on the presence of `error` first, then on `ok` for intact vs broken.
     if ("error" in res) {
-      setResult(`Hash chain check faalde: ${res.error}`)
+      setResult({ ok: false, text: `Hash chain check faalde: ${res.error}` })
       return
     }
     if (res.ok) {
-      setResult(`Hash chain intact (${res.verified} events geverifieerd).`)
+      setResult({ ok: true, text: `Hash chain intact (${res.verified} events geverifieerd).` })
     } else {
-      setResult(
-        `BREEK PUNT bij seq ${res.broken_at_seq}: verwacht ${res.expected.slice(0, 16)}…, gevonden ${res.actual.slice(0, 16)}…`,
-      )
+      setResult({
+        ok: false,
+        text: `BREEKPUNT bij seq ${res.broken_at_seq}: verwacht ${res.expected.slice(0, 16)}…, gevonden ${res.actual.slice(0, 16)}…`,
+      })
     }
   }
 
   return (
     <>
-      <div className="mb-4 flex items-center gap-3">
-        <button
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Button
+          variant="primary"
+          icon={<ShieldCheck size={18} />}
           onClick={verify}
           disabled={verifying}
-          className="rounded bg-[var(--color-brand)] px-4 py-2 font-semibold text-white disabled:opacity-40"
         >
-          {verifying ? "Verifieren…" : "Verifieer hash chain"}
-        </button>
-        {result ? <span className="text-sm">{result}</span> : null}
+          {verifying ? "Verifiëren…" : "Verifieer hash chain"}
+        </Button>
+        {result ? (
+          <span
+            className={cn(
+              "rounded-md px-3.5 py-2.5 text-[14px] font-semibold leading-none",
+              result.ok ? "bg-hop-50 text-hop-800" : "bg-brick-100 text-brick-700"
+            )}
+          >
+            {result.text}
+          </span>
+        ) : null}
       </div>
-      <table className="w-full text-xs font-mono">
-        <thead>
-          <tr className="border-b border-[var(--color-border)] text-left">
-            <th className="py-2">seq</th>
-            <th>wanneer</th>
-            <th>type</th>
-            <th>actor</th>
-            <th>hash_curr</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((e) => (
-            <tr key={e.seq_id} className="border-b border-[var(--color-border)]">
-              <td className="py-1">{e.seq_id}</td>
-              <td>{new Date(e.created_at).toLocaleString("nl-NL")}</td>
-              <td>{e.event_type}</td>
-              <td>{e.actor}</td>
-              <td>{e.hash_curr.slice(0, 24)}…</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+      <div className="overflow-hidden rounded-lg border border-line-strong bg-paper-bright">
+        {rows.length === 0 ? (
+          <p className="p-5 text-[14px] font-medium text-charcoal-500">
+            Nog geen audit-events.
+          </p>
+        ) : (
+          rows.map((e, i) => {
+            const { Icon, color } = eventMeta(e.event_type)
+            return (
+              <div
+                key={e.seq_id}
+                className={cn(
+                  "flex items-center gap-4 px-5 py-4",
+                  i > 0 && "border-t border-line"
+                )}
+              >
+                <span className="hb-tabular min-w-12 text-[14px] font-bold leading-none text-charcoal-500">
+                  {new Date(e.created_at).toLocaleTimeString("nl-NL", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-line bg-paper">
+                  <Icon size={18} style={{ color }} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-bold leading-none text-charcoal-900">
+                    {e.event_type}
+                  </div>
+                  <div className="hb-tabular mt-1 truncate text-[13px] font-medium leading-[1.3] text-charcoal-500">
+                    seq {e.seq_id} · {e.hash_curr.slice(0, 24)}…
+                  </div>
+                </div>
+                <span className="hb-tabular text-[14px] font-semibold leading-none text-charcoal-500">
+                  {e.actor}
+                </span>
+              </div>
+            )
+          })
+        )}
+      </div>
     </>
   )
 }

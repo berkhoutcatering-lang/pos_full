@@ -1,8 +1,13 @@
 "use client"
-import { useEffect, useOptimistic, useState, useTransition } from "react"
+import { useEffect, useMemo, useOptimistic, useState, useTransition } from "react"
+import { AlertTriangle, Layers, XCircle } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import type { OperationalItem } from "@/lib/dal/operational-items"
 import { updateStockAction } from "@/lib/dal/admin-operational"
+import { accentForCategory, labelForCategory } from "@/lib/pos/menu-groups"
+import { Badge } from "@/components/ui/badge"
+import { StatCard } from "@/components/admin/stat-card"
+import { cn } from "@/lib/cn"
 
 interface OptimisticPatch {
   item_id: string
@@ -85,87 +90,145 @@ export function VoorraadView({
     })
   }
 
-  // Group by category for the operator-first layout.
-  const byCategory = optimistic.reduce<Record<string, OperationalItem[]>>((acc, it) => {
-    ;(acc[it.category] ??= []).push(it)
-    return acc
-  }, {})
+  const byCategory = useMemo(
+    () =>
+      optimistic.reduce<Record<string, OperationalItem[]>>((acc, it) => {
+        ;(acc[it.category] ??= []).push(it)
+        return acc
+      }, {}),
+    [optimistic],
+  )
+  const categories = Object.keys(byCategory)
+
+  const tracked = optimistic.filter((i) => i.stock_qty !== null)
+  const lowCount = tracked.filter((i) => i.stock_qty! > 0 && i.stock_qty! <= 5).length
+  const outCount = tracked.filter((i) => i.stock_qty! <= 0).length
 
   return (
-    <div className="space-y-6">
-      {Object.entries(byCategory).map(([cat, list]) => (
-        <section key={cat}>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide opacity-70">
-            {cat}
-          </h3>
-          <ul className="divide-y divide-[var(--color-border)] rounded-lg border border-[var(--color-border)]">
-            {list.map((it) => (
-              <li key={it.id} className="flex items-center justify-between p-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{it.name}</div>
-                  <div className="text-xs opacity-60">
-                    {it.stock_qty === null ? (
-                      "ongelimiteerd"
-                    ) : it.stock_qty === 0 ? (
-                      <span className="font-semibold text-red-700">OP</span>
-                    ) : (
-                      `${it.stock_qty} voorraad`
-                    )}
+    <div>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <StatCard
+          label="Items laag"
+          value={lowCount}
+          icon={<AlertTriangle size={18} />}
+          accent="var(--color-amber-600)"
+        />
+        <StatCard
+          label="Uitverkocht"
+          value={outCount}
+          icon={<XCircle size={18} />}
+          accent="var(--color-brick-600)"
+        />
+        <StatCard
+          label="Categorieën"
+          value={categories.length}
+          icon={<Layers size={18} />}
+          accent="var(--color-charcoal-700)"
+        />
+      </div>
+
+      <div className="flex flex-col gap-6">
+        {categories.map((cat) => (
+          <section key={cat}>
+            <div className="mb-3 flex items-center gap-2.5">
+              <span
+                className="h-3 w-3 rounded-[3px]"
+                style={{ background: accentForCategory(cat, categories.indexOf(cat)) }}
+              />
+              <span className="text-[17px] font-extrabold leading-none text-charcoal-900">
+                {labelForCategory(cat)}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {byCategory[cat]!.map((it) => {
+                const n = it.stock_qty
+                const status =
+                  n === null
+                    ? null
+                    : n <= 0
+                      ? { v: "danger" as const, t: "Uitverkocht" }
+                      : n <= 5
+                        ? { v: "amber" as const, t: "Bijna op" }
+                        : null
+                return (
+                  <div
+                    key={it.id}
+                    className="flex items-center gap-3.5 rounded-lg border border-line-strong bg-paper-bright px-[18px] py-3.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[16px] font-bold leading-[1.2] text-charcoal-900">
+                        {it.name}
+                      </div>
+                      {status ? (
+                        <div className="mt-1.5">
+                          <Badge variant={status.v} size="sm">
+                            {status.t}
+                          </Badge>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <StepBtn onClick={() => bump(it, -5)} small>
+                        −5
+                      </StepBtn>
+                      <StepBtn onClick={() => bump(it, -1)}>−</StepBtn>
+                      <span
+                        className={cn(
+                          "hb-tabular min-w-11 text-center text-[24px] font-extrabold leading-none",
+                          n !== null && n <= 0 ? "text-brick-600" : "text-charcoal-900"
+                        )}
+                      >
+                        {n === null ? "∞" : n}
+                      </span>
+                      <StepBtn onClick={() => bump(it, 1)}>+</StepBtn>
+                      <StepBtn onClick={() => bump(it, 5)} small>
+                        +5
+                      </StepBtn>
+                      <StepBtn onClick={() => setExact(it, 0)} danger small>
+                        OP
+                      </StepBtn>
+                      <StepBtn onClick={() => setExact(it, null)} small title="Ongelimiteerd">
+                        ∞
+                      </StepBtn>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => bump(it, -10)}
-                    className="min-h-[44px] min-w-[56px] rounded-full bg-[var(--color-border)] text-base"
-                  >
-                    −10
-                  </button>
-                  <button
-                    onClick={() => bump(it, -5)}
-                    className="min-h-[44px] min-w-[44px] rounded-full bg-[var(--color-border)] text-base"
-                  >
-                    −5
-                  </button>
-                  <button
-                    onClick={() => bump(it, -1)}
-                    className="min-h-[44px] min-w-[44px] rounded-full bg-[var(--color-border)] text-base"
-                  >
-                    −1
-                  </button>
-                  <span className="min-w-[3ch] text-center font-semibold tabular-nums">
-                    {it.stock_qty === null ? "∞" : it.stock_qty}
-                  </span>
-                  <button
-                    onClick={() => bump(it, 1)}
-                    className="min-h-[44px] min-w-[44px] rounded-full bg-[var(--color-border)] text-base"
-                  >
-                    +1
-                  </button>
-                  <button
-                    onClick={() => bump(it, 5)}
-                    className="min-h-[44px] min-w-[44px] rounded-full bg-[var(--color-border)] text-base"
-                  >
-                    +5
-                  </button>
-                  <button
-                    onClick={() => setExact(it, 0)}
-                    className="min-h-[44px] rounded-full bg-red-100 px-3 text-sm font-semibold text-red-800"
-                  >
-                    OP
-                  </button>
-                  <button
-                    onClick={() => setExact(it, null)}
-                    className="min-h-[44px] rounded-full bg-emerald-100 px-3 text-sm font-semibold text-emerald-800"
-                    title="Ongelimiteerd"
-                  >
-                    ∞
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+                )
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
+  )
+}
+
+function StepBtn({
+  children,
+  onClick,
+  small = false,
+  danger = false,
+  title,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  small?: boolean
+  danger?: boolean
+  title?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={cn(
+        "h-11 flex-none rounded-md border text-center leading-none transition-[background] duration-[var(--dur-fast)] active:scale-[0.97]",
+        small ? "w-11 text-[15px] font-bold" : "w-11 text-[22px] font-bold",
+        danger
+          ? "border-brick-600 bg-paper-bright text-brick-600 hover:bg-brick-100"
+          : "border-line-strong bg-paper text-charcoal-800 hover:bg-offwhite"
+      )}
+    >
+      {children}
+    </button>
   )
 }

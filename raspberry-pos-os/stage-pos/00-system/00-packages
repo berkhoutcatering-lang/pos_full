@@ -1,0 +1,13 @@
+avahi-daemon
+avahi-utils
+libavahi-compat-libdnssd1
+libavahi-compat-libdnssd-dev
+libnss-mdns
+build-essential
+python3
+curl
+ca-certificates
+openssl
+cage
+xwayland
+chromium-browser

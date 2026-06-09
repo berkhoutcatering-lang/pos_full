@@ -1,4 +1,5 @@
 import { requireRole, requireVenue } from "@/lib/dal/auth"
+import { PageHead } from "@/components/admin/page-head"
 import { DevicesView } from "./devices-view"
 
 export const dynamic = "force-dynamic"
@@ -8,11 +9,11 @@ export default async function DevicesPage() {
   await requireVenue()
   return (
     <section>
-      <h2 className="mb-4 text-2xl font-bold">Apparaten</h2>
-      <p className="mb-3 text-sm opacity-70">
-        Genereer een pairing-code en voer die in op de tablet bij{" "}
-        <code>https://hopbites.local</code>.
-      </p>
+      <PageHead
+        eyebrow="Operationeel · werkt offline"
+        title="Apparaten"
+        sub="Alle hardware op deze locatie. De Pi-bridge houdt de kassa draaiend, ook als het internet wegvalt."
+      />
       <DevicesView />
     </section>
   )

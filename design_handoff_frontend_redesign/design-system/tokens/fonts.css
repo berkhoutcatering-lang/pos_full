@@ -1,0 +1,12 @@
+/* Hop & Bites — Webfonts
+ * Hanken Grotesk: a clean, neutral grotesk with excellent legibility at
+ * distance and true tabular figures — ideal for a touch POS.
+ * Loaded from Google Fonts (no local binaries shipped — see readme CAVEATS). */
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap');
+
+/* Family aliases so consumers never hard-code the font name. */
+:root {
+  --font-sans: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Hanken Grotesk', system-ui, sans-serif;
+  --font-numeric: 'Hanken Grotesk', system-ui, sans-serif;
+}

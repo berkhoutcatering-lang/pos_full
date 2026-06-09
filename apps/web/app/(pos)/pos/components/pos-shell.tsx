@@ -1,20 +1,45 @@
 "use client"
-import { useEffect, useMemo, useReducer, useState } from "react"
+import { useEffect, useMemo, useReducer, useRef, useState } from "react"
+import { ulid } from "ulid"
+import { Check } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
-import { cartReducer, initialCart } from "@/lib/pos/cart-reducer"
+import { cartReducer, initialCart, type CartState } from "@/lib/pos/cart-reducer"
 import { priceCart } from "@/lib/pos/pricing"
 import type { MenuItem, MenuSnapshot, ModifierGroup } from "@/lib/pos/types"
-import { ProductGrid } from "./product-grid"
-import { CategoryTabs } from "./category-tabs"
-import { CartDrawer } from "./cart-drawer"
-import { PaymentDock } from "./payment-dock"
+import { KassaTopBar } from "./kassa-top-bar"
+import { ReceiptPanel } from "./receipt-panel"
+import { NumpadCell } from "./numpad-cell"
+import { ProductArea } from "./product-area"
+import { BottomDock, type UtilityAction } from "./bottom-dock"
+import {
+  PaymentOverlay,
+  type AttemptKeys,
+  type CheckoutMethod,
+} from "./payment-overlay"
+import { SplitOverlay } from "./split-overlay"
+import { NoteOverlay } from "./note-overlay"
 import { ModifierPicker } from "./modifier-picker"
 import { ProductSearch } from "./product-search"
-import { ConnectionChip } from "@/components/connection-chip"
 
 export interface PosShellProps {
   initialMenu: MenuSnapshot
   claims: { orgId: string; venueId: string; role: string }
+}
+
+function freshAttempt(): AttemptKeys {
+  return {
+    order_id: crypto.randomUUID(),
+    order_idempotency_key: ulid(),
+    kitchen_print_key: ulid(),
+    receipt_print_key: ulid(),
+    pin_idempotency_key: ulid(),
+  }
+}
+
+interface HeldBon {
+  cart: CartState
+  discountPct: number
+  heldAt: number
 }
 
 export function PosShell({ initialMenu, claims }: PosShellProps) {
@@ -73,10 +98,8 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
               }
             }
             // Item became available again — we don't have full row data
-            // (name/category etc.) from the realtime event; trigger a
-            // soft refresh by reloading the page on next nav tick. For
-            // v1 the manager flips "weer aan" between rushes which is
-            // OK to require an explicit refresh.
+            // (name/category etc.) from the realtime event; the manager
+            // flips "weer aan" between rushes, an explicit refresh is OK.
             return cur
           })
         },
@@ -87,19 +110,33 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
     }
   }, [claims.orgId, claims.venueId])
 
-  const categories = useMemo(
-    () => Array.from(new Set(menu.items.map((i) => i.category))),
-    [menu.items],
-  )
-  const [category, setCategory] = useState<string>(categories[0] ?? "")
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [payExpanded, setPayExpanded] = useState(false)
+  // ---- Kassa client state (mirrors the design reference) ----
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [pendingQty, setPendingQty] = useState("")
+  const [discountPct, setDiscountPct] = useState(0)
+  const [holds, setHolds] = useState<HeldBon[]>([])
+  const [payMethod, setPayMethod] = useState<CheckoutMethod | "choose" | null>(null)
+  const [splitOpen, setSplitOpen] = useState(false)
+  const [noteFor, setNoteFor] = useState<"klant" | "notitie" | null>(null)
   const [pickerFor, setPickerFor] = useState<MenuItem | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // One attempt = one customer transaction; survives overlay close/reopen
+  // so retries stay idempotent. Reset only after a successful payment.
+  const attemptRef = useRef<AttemptKeys>(freshAttempt())
+
+  const flash = (msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2200)
+  }
 
   const priced = useMemo(
-    () => priceCart(cart.items, menu.combos, menu.staffels),
-    [cart.items, menu.combos, menu.staffels],
+    () => priceCart(cart.items, menu.combos, menu.staffels, discountPct),
+    [cart.items, menu.combos, menu.staffels, discountPct],
   )
+  const empty = priced.items.length === 0
 
   const modsForItem = (item: MenuItem): ModifierGroup[] =>
     menu.modifier_groups.filter((g) =>
@@ -107,60 +144,167 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
     )
 
   const handleAdd = (item: MenuItem) => {
+    const qty = Math.max(1, parseInt(pendingQty || "1", 10))
     const groups = modsForItem(item)
-    const needsPicker = groups.some((g) => g.min_select > 0) || groups.length > 0
-    if (needsPicker) {
+    if (groups.length > 0) {
       setPickerFor(item)
       return
     }
-    dispatch({ type: "add", menu_item: item })
+    dispatch({ type: "add", menu_item: item, qty })
+    if (pendingQty) setPendingQty("")
+  }
+
+  const resetBon = () => {
+    dispatch({ type: "clear" })
+    setSelectedId(null)
+    setDiscountPct(0)
+    setPendingQty("")
+  }
+
+  const onKorting = () => {
+    setDiscountPct((d) => (d > 0 ? 0 : 10))
+    flash(discountPct > 0 ? "Korting verwijderd" : "10% korting toegepast")
+  }
+
+  const onHold = () => {
+    setHolds((h) => [...h, { cart, discountPct, heldAt: Date.now() }])
+    resetBon()
+    flash("Bon in de wacht gezet")
+  }
+
+  const onRetour = () => {
+    resetBon()
+    flash("Bon geannuleerd")
+  }
+
+  const onUtility = (a: UtilityAction) => {
+    if (a === "lade") flash("Kassalade geopend")
+    else setNoteFor(a)
+  }
+
+  // "In de wacht" on an empty bon resumes the most recently held bon.
+  const onHoldKeyWithEmptyBon = () => {
+    const last = holds[holds.length - 1]
+    if (!last) return
+    setHolds((h) => h.slice(0, -1))
+    for (const it of last.cart.items) {
+      dispatch({
+        type: "add",
+        menu_item: it.menu_item,
+        modifiers: it.selected_modifiers,
+        qty: it.qty,
+        note: it.note,
+      })
+    }
+    if (last.cart.customer_name)
+      dispatch({ type: "set_customer", name: last.cart.customer_name })
+    if (last.cart.notes) dispatch({ type: "set_order_note", note: last.cart.notes })
+    setDiscountPct(last.discountPct)
+    flash("Bon uit de wacht gehaald")
+  }
+
+  const onPaid = () => {
+    attemptRef.current = freshAttempt()
+    setPayMethod(null)
+    resetBon()
+    flash("Bon afgerond · naar keuken")
   }
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2">
-        <h1 className="text-sm font-semibold opacity-80">Kassa</h1>
-        <ConnectionChip />
-      </header>
-      <CategoryTabs
-        categories={categories}
-        active={category}
-        onChange={setCategory}
-      />
-      <div className="flex-1 overflow-auto p-3">
-        <ProductGrid
-          items={menu.items.filter((i) => i.category === category)}
-          onAdd={handleAdd}
-        />
+    <div className="relative flex h-dvh flex-col bg-offwhite">
+      <KassaTopBar />
+
+      <div className="flex min-h-0 flex-1 gap-3 p-3.5">
+        {/* Left column: receipt + numpad */}
+        <div className="flex w-[var(--receipt-w)] max-w-[42vw] flex-none flex-col gap-3">
+          <div className="min-h-0 flex-1">
+            <ReceiptPanel
+              priced={priced}
+              dispatch={dispatch}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              discountPct={discountPct}
+              holdCount={holds.length}
+            />
+          </div>
+          <div className="h-[360px] flex-none">
+            <NumpadCell value={pendingQty} onChange={setPendingQty} />
+          </div>
+        </div>
+
+        {/* Right column: products + dock */}
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="min-h-0 flex-1">
+            <ProductArea items={menu.items} onAdd={handleAdd} />
+          </div>
+          <BottomDock
+            totalCents={priced.total_incl_cents}
+            empty={empty}
+            canResumeHold={holds.length > 0}
+            discountPct={discountPct}
+            onKorting={onKorting}
+            onHold={empty ? onHoldKeyWithEmptyBon : onHold}
+            onSplit={() => setSplitOpen(true)}
+            onRetour={onRetour}
+            onUtility={onUtility}
+            onPay={(m) => {
+              if (!empty) setPayMethod(m)
+            }}
+            onAfrekenen={() => {
+              if (!empty) setPayMethod("choose")
+            }}
+            onOpRekening={() => flash("Op rekening — binnenkort beschikbaar")}
+          />
+        </div>
       </div>
-      {!payExpanded ? (
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="m-3 min-h-[88px] rounded-xl bg-[var(--color-brand)] p-4 text-xl font-semibold text-white shadow-lg active:scale-[0.98]"
-        >
-          Bekijk bestelling — {cart.items.length}{" "}
-          {cart.items.length === 1 ? "item" : "items"} — €
-          {(priced.total_incl_cents / 100).toFixed(2)}
-        </button>
+
+      {payMethod !== null ? (
+        <PaymentOverlay
+          initialMethod={payMethod === "choose" ? null : payMethod}
+          priced={priced}
+          cart={cart}
+          claims={claims}
+          attempt={attemptRef.current}
+          onClose={() => setPayMethod(null)}
+          onComplete={onPaid}
+        />
       ) : null}
 
-      <CartDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        cart={cart}
-        priced={priced}
-        dispatch={dispatch}
-        onCheckout={() => setPayExpanded(true)}
-      />
+      {splitOpen ? (
+        <SplitOverlay
+          totalCents={priced.total_incl_cents}
+          onClose={() => setSplitOpen(false)}
+        />
+      ) : null}
 
-      <PaymentDock
-        priced={priced}
-        cart={cart}
-        claims={claims}
-        expanded={payExpanded}
-        onExpandedChange={setPayExpanded}
-        onDone={() => dispatch({ type: "clear" })}
-      />
+      {noteFor === "klant" ? (
+        <NoteOverlay
+          title="Klant"
+          label="Klantnaam"
+          placeholder="Bv. Jan"
+          maxLength={64}
+          initialValue={cart.customer_name ?? ""}
+          onSave={(v) => {
+            dispatch({ type: "set_customer", name: v || undefined })
+            if (v) flash(`Klant: ${v}`)
+          }}
+          onClose={() => setNoteFor(null)}
+        />
+      ) : null}
+
+      {noteFor === "notitie" ? (
+        <NoteOverlay
+          title="Notitie"
+          label="Bon-notitie"
+          placeholder="Bv. zonder ui"
+          initialValue={cart.notes ?? ""}
+          onSave={(v) => {
+            dispatch({ type: "set_order_note", note: v })
+            if (v) flash("Notitie toegevoegd")
+          }}
+          onClose={() => setNoteFor(null)}
+        />
+      ) : null}
 
       <ProductSearch items={menu.items} onPick={handleAdd} />
 
@@ -168,18 +312,21 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
         <ModifierPicker
           item={pickerFor}
           groups={modsForItem(pickerFor)}
+          initialQty={Math.max(1, parseInt(pendingQty || "1", 10))}
           onConfirm={(modifiers, qty, note) => {
-            dispatch({
-              type: "add",
-              menu_item: pickerFor,
-              modifiers,
-              qty,
-              note,
-            })
+            dispatch({ type: "add", menu_item: pickerFor, modifiers, qty, note })
             setPickerFor(null)
+            if (pendingQty) setPendingQty("")
           }}
           onCancel={() => setPickerFor(null)}
         />
+      ) : null}
+
+      {/* Toast: charcoal pill, bottom-center */}
+      {toast ? (
+        <div className="absolute bottom-7 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-3 rounded-md bg-charcoal-900 px-[26px] py-4 text-[18px] font-bold leading-none text-offwhite shadow-[var(--shadow-raised)]">
+          <Check size={22} strokeWidth={3} className="text-hop-500" /> {toast}
+        </div>
       ) : null}
     </div>
   )

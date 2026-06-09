@@ -1,5 +1,6 @@
 import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { listOperationalItems } from "@/lib/dal/operational-items"
+import { PageHead } from "@/components/admin/page-head"
 import { AvailabilityView } from "./availability-view"
 
 export const dynamic = "force-dynamic"
@@ -13,10 +14,11 @@ export default async function AvailabilityPage() {
   })
   return (
     <section>
-      <h2 className="mb-4 text-2xl font-bold">Beschikbaarheid</h2>
-      <p className="mb-3 text-sm opacity-70">
-        Tik een item om het direct uit te schakelen op de kassa. Geel = manager-uit, rood = OP (geen voorraad).
-      </p>
+      <PageHead
+        eyebrow="Operationeel · werkt offline"
+        title="Beschikbaarheid"
+        sub="Zet items aan/uit. Wijzigingen verschijnen direct op de kassa — amber = manager-uit, rood = OP (geen voorraad)."
+      />
       <AvailabilityView initial={items} orgId={claims.orgId} venueId={claims.venueId} />
     </section>
   )

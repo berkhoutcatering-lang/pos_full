@@ -1,0 +1,37 @@
+/* Hop & Bites — Spacing, radii & layout tokens
+ * Touch-first: generous targets, crisp rhythm on a 4px base. */
+:root {
+  /* ---- Spacing scale (4px base) ---- */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10:72px;
+
+  /* ---- Corner radii (angular, blocky — MPLUS-style hard edges) ---- */
+  --radius-xs: 0;
+  --radius-sm: 2px;
+  --radius-md: 3px;   /* tiles, buttons */
+  --radius-lg: 4px;   /* panels */
+  --radius-xl: 6px;   /* dialogs */
+
+  /* ---- Touch targets ---- */
+  --touch-min:    48px;   /* absolute minimum hit area */
+  --touch-fn:     72px;   /* function-button height */
+  --tile-min-h:   120px;  /* product tile height */
+  --cattab-h:     60px;   /* horizontal category bar height */
+  --rail-w:       136px;  /* vertical group rail width */
+  --rail-item-h:  104px;  /* vertical group button height */
+  --numpad-w:     248px;  /* numpad column width */
+
+  /* ---- Layout ---- */
+  --receipt-w:    520px;  /* fixed receipt panel width */
+  --topbar-h:     76px;
+  --container-pad:24px;
+}

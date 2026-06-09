@@ -1,5 +1,7 @@
 "use client"
+import { cn } from "@/lib/cn"
 
+/** Station chips for the charcoal KDS header. */
 export function StationFilter({
   stations,
   active,
@@ -16,11 +18,12 @@ export function StationFilter({
         <button
           key={s}
           onClick={() => onChange(s)}
-          className={`min-h-[44px] rounded-full px-4 text-sm font-medium capitalize ${
+          className={cn(
+            "h-11 rounded-md border px-5 text-[15px] font-bold capitalize leading-none transition-[background,color,border-color] duration-[var(--dur-fast)]",
             s === active
-              ? "bg-[var(--color-brand)] text-white"
-              : "bg-[color-mix(in_oklch,var(--color-accent)_15%,transparent)]"
-          }`}
+              ? "border-hop-500 bg-hop-600 text-white"
+              : "border-charcoal-700 bg-transparent text-charcoal-300 hover:text-offwhite"
+          )}
         >
           {s}
         </button>

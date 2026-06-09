@@ -1,8 +1,22 @@
 "use client"
 import { useState } from "react"
+import { Printer, ShieldCheck } from "lucide-react"
 import type { ZReport } from "@/lib/dal/dagafsluiting"
 import { closeDayAction } from "./actions"
 import { HashChainBadge } from "@/components/hash-chain-badge"
+import { PageHead } from "@/components/admin/page-head"
+import { Button } from "@/components/ui/button"
+import { euroCents } from "@/lib/format"
+import { cn } from "@/lib/cn"
+
+const BTW_LABELS: Record<string, string> = {
+  food_9: "Eten / frisdrank",
+  nonalc_beer_9: "Alcoholvrij bier",
+  alcohol_21: "Alcohol",
+  soda_21: "Hoog tarief",
+  deposit_0: "Statiegeld",
+  service_0: "Service / fooi",
+}
 
 export function ZReportView({ report }: { report: ZReport }) {
   const [busy, setBusy] = useState(false)
@@ -16,83 +30,137 @@ export function ZReportView({ report }: { report: ZReport }) {
     setMsg(res.ok ? "Dag afgesloten + audit_log geschreven." : `Fout: ${res.error}`)
   }
 
-  const eur = (c: number) => `€${(c / 100).toFixed(2)}`
+  const gem =
+    report.order_count > 0
+      ? Math.round(report.total_incl_cents / report.order_count)
+      : 0
+  const totalPaid =
+    report.payment_split.cash_cents +
+    report.payment_split.pin_cents +
+    report.payment_split.ideal_cents +
+    report.payment_split.other_cents
+  const btwClasses = Object.entries(report.btw_breakdown).filter(
+    ([, b]) => b.incl_cents > 0,
+  )
 
   return (
     <section>
-      <header className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold">Z-rapport — {report.date}</h2>
-          <HashChainBadge />
-        </div>
-        <button
-          onClick={handleClose}
-          disabled={busy}
-          className="rounded bg-[var(--color-brand)] px-4 py-2 font-semibold text-white disabled:opacity-40"
-        >
-          {busy ? "Bezig…" : "Sluit dag af + print"}
-        </button>
-      </header>
-      {msg ? <p className="mb-3 text-sm">{msg}</p> : null}
+      <PageHead
+        eyebrow="Operationeel · werkt offline"
+        title="Dagafsluiting"
+        sub={`Z-bon voor ${report.date}`}
+        action={
+          <Button
+            variant="primary"
+            icon={<Printer size={18} />}
+            onClick={handleClose}
+            disabled={busy}
+          >
+            {busy ? "Bezig…" : "Print Z-bon"}
+          </Button>
+        }
+      />
 
-      <div className="mb-6 grid grid-cols-3 gap-3">
-        <Stat label="Orders" value={report.order_count.toString()} />
-        <Stat label="Voids" value={report.void_count.toString()} />
-        <Stat label="Refunds" value={report.refund_count.toString()} />
-        <Stat label="Subtotaal excl." value={eur(report.total_excl_cents)} />
-        <Stat label="BTW totaal" value={eur(report.total_btw_cents)} />
-        <Stat label="Totaal incl." value={eur(report.total_incl_cents)} bold />
+      <div className="mb-4 flex items-center gap-3">
+        <HashChainBadge />
+        {msg ? (
+          <span className="text-[14px] font-semibold text-charcoal-800">{msg}</span>
+        ) : null}
       </div>
 
-      <h3 className="mb-2 text-lg font-semibold">BTW-splits</h3>
-      <table className="mb-6 w-full text-sm">
-        <thead>
-          <tr className="border-b border-[var(--color-border)] text-left">
-            <th className="py-2">Klasse</th>
-            <th>Tarief</th>
-            <th>Excl.</th>
-            <th>BTW</th>
-            <th>Incl.</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(report.btw_breakdown).map(([cls, b]) => (
-            <tr key={cls} className="border-b border-[var(--color-border)]">
-              <td className="py-2">{cls}</td>
-              <td>{b.rate}%</td>
-              <td>{eur(b.excl_cents)}</td>
-              <td>{eur(b.btw_cents)}</td>
-              <td>{eur(b.incl_cents)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Receipt-style Z-bon card */}
+      <div className="max-w-[560px] rounded-lg border border-line-strong bg-paper px-8 py-7">
+        <div className="border-b border-dashed border-line-strong pb-[18px] text-center">
+          <div className="text-[22px] font-extrabold leading-none text-charcoal-900">
+            Hop &amp; Bites — Z-bon
+          </div>
+          <div className="hb-tabular mt-1.5 text-[13px] font-semibold leading-none text-charcoal-500">
+            {report.date}
+            {report.first_order_at
+              ? ` · eerste bon ${new Date(report.first_order_at).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}`
+              : ""}
+          </div>
+        </div>
 
-      <h3 className="mb-2 text-lg font-semibold">Betaalmethoden</h3>
-      <div className="grid grid-cols-3 gap-3">
-        <Stat label="Cash" value={eur(report.payment_split.cash_cents)} />
-        <Stat label="PIN" value={eur(report.payment_split.pin_cents)} />
-        <Stat label="iDEAL" value={eur(report.payment_split.ideal_cents)} />
+        <div className="border-b border-dashed border-line-strong py-4">
+          <Row label="Aantal orders" value={String(report.order_count)} />
+          <Row label="Bruto omzet" value={euroCents(report.total_incl_cents)} />
+          <Row label="Waarvan BTW" value={euroCents(report.total_btw_cents)} muted />
+          <Row label="Gemiddelde bon" value={euroCents(gem)} muted />
+          {report.discount_cents > 0 ? (
+            <Row label="Korting" value={"− " + euroCents(report.discount_cents)} muted />
+          ) : null}
+          {report.void_count > 0 ? (
+            <Row label="Voids" value={String(report.void_count)} muted />
+          ) : null}
+          {report.refund_count > 0 ? (
+            <Row label="Refunds" value={String(report.refund_count)} muted />
+          ) : null}
+        </div>
+
+        {btwClasses.length > 0 ? (
+          <div className="border-b border-dashed border-line-strong py-4">
+            {btwClasses.map(([cls, b]) => (
+              <Row
+                key={cls}
+                label={`${BTW_LABELS[cls] ?? cls} (${b.rate}%)`}
+                value={euroCents(b.btw_cents)}
+                muted
+              />
+            ))}
+          </div>
+        ) : null}
+
+        <div className="border-b border-dashed border-line-strong py-4">
+          <Row label="PIN / contactloos" value={euroCents(report.payment_split.pin_cents)} />
+          <Row label="Contant" value={euroCents(report.payment_split.cash_cents)} />
+          <Row label="iDEAL (QR)" value={euroCents(report.payment_split.ideal_cents)} />
+          {report.payment_split.other_cents > 0 ? (
+            <Row label="Overig" value={euroCents(report.payment_split.other_cents)} />
+          ) : null}
+        </div>
+
+        <div className="flex items-baseline justify-between py-3.5">
+          <span className="text-[20px] font-extrabold leading-none text-charcoal-800">
+            Totaal afgerekend
+          </span>
+          <span className="hb-tabular text-[24px] font-extrabold leading-none text-charcoal-900">
+            {euroCents(totalPaid)}
+          </span>
+        </div>
+
+        <div className="mt-[18px] flex items-center gap-2.5 rounded-md border border-hop-100 bg-hop-50 px-3.5 py-3 text-[13px] font-semibold leading-[1.4] text-hop-800">
+          <ShieldCheck size={18} className="flex-none text-hop-700" />
+          Kasverschil {euroCents(Math.max(0, totalPaid - report.total_incl_cents))} ·
+          lade geteld en bevestigd
+        </div>
       </div>
     </section>
   )
 }
 
-function Stat({
+function Row({
   label,
   value,
-  bold,
+  muted = false,
 }: {
   label: string
   value: string
-  bold?: boolean
+  muted?: boolean
 }) {
   return (
-    <div className="rounded-xl border border-[var(--color-border)] p-3">
-      <div className="text-xs uppercase tracking-wide opacity-70">{label}</div>
-      <div className={`mt-1 text-xl ${bold ? "font-bold" : "font-medium"}`}>
+    <div className="flex items-baseline justify-between py-[7px]">
+      <span
+        className={cn(
+          "text-[15px] font-medium leading-none",
+          muted ? "text-charcoal-500" : "text-charcoal-800"
+        )}
+      >
+        {label}
+      </span>
+      <span className="hb-tabular text-[15px] font-bold leading-none text-charcoal-900">
         {value}
-      </div>
+      </span>
     </div>
   )
 }

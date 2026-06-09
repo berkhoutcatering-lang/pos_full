@@ -5,77 +5,239 @@
 @source "../app/**/*.{ts,tsx}";
 @source "../components/**/*.{ts,tsx}";
 
+/* ============================================================
+   Hop & Bites design system — tokens
+   Source of truth: design_handoff_frontend_redesign/design-system/tokens
+   Warm offwhite surfaces, antraciet ink & chrome, hop-green action
+   accent, brick red destructive, ember amber attention. Flat, angular.
+   ============================================================ */
+
 @theme {
-  /* Default preset: hopbites — overridden at runtime by org_theme_settings */
-  --color-brand: oklch(0.65 0.22 35);
-  --color-surface: oklch(0.98 0.005 90);
-  --color-surface-fg: oklch(0.18 0.01 90);
-  --color-accent: oklch(0.75 0.15 70);
-  --color-border: oklch(0.88 0.01 90);
+  /* ---- Surfaces ---- */
+  --color-offwhite: #F4F1E8;
+  --color-paper: #FBF9F2;
+  --color-paper-bright: #FFFFFF;
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  /* ---- Antraciet (charcoal) ramp ---- */
+  --color-charcoal-900: #1B201D;
+  --color-charcoal-800: #272D29;
+  --color-charcoal-700: #363D38;
+  --color-charcoal-600: #4C544E;
+  --color-charcoal-500: #697069;
+  --color-charcoal-400: #8C9289;
+  --color-charcoal-300: #B6BAB0;
+
+  /* ---- Hop green — the action accent ---- */
+  --color-hop-800: #234E31;
+  --color-hop-700: #2B6440;
+  --color-hop-600: #34794D;
+  --color-hop-500: #3F9159;
+  --color-hop-300: #9BC8A6;
+  --color-hop-100: #DCEBDD;
+  --color-hop-50: #EDF4EC;
+
+  /* ---- BBQ brick — destructive only ---- */
+  --color-brick-700: #9E392C;
+  --color-brick-600: #B64536;
+  --color-brick-100: #F4E0DB;
+
+  /* ---- Ember amber — discount / attention ---- */
+  --color-amber-600: #C2851C;
+  --color-amber-100: #F6E9CC;
+
+  /* ---- Hairlines & dividers ---- */
+  --color-line: #E3DECF;
+  --color-line-strong: #D2CBB6;
+  --color-line-soft: #ECE8DC;
+
+  /* ---- Radii (angular, blocky) ---- */
+  --radius-xs: 0px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+
+  /* ---- Type ---- */
+  --font-sans: var(--font-hanken), system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* 8 presets — runtime selected via <html data-theme="..."> */
-[data-theme="hopbites"] {
-  --color-brand: oklch(0.65 0.22 35);
-  --color-surface: oklch(0.98 0.005 90);
-  --color-surface-fg: oklch(0.18 0.01 90);
-  --color-accent: oklch(0.75 0.15 70);
-  --color-border: oklch(0.88 0.01 90);
+:root {
+  /* ---- Semantic aliases (non-Tailwind consumers + arbitrary values) ---- */
+  --bg-app: var(--color-offwhite);
+  --bg-receipt: var(--color-paper);
+  --bg-tile: var(--color-paper-bright);
+  --bg-topbar: var(--color-charcoal-900);
+
+  --text-strong: var(--color-charcoal-900);
+  --text-body: var(--color-charcoal-800);
+  --text-muted: var(--color-charcoal-500);
+  --text-disabled: var(--color-charcoal-300);
+  --text-on-dark: var(--color-offwhite);
+  --text-on-accent: #FBF9F2;
+
+  --accent: var(--color-hop-600);
+  --accent-hover: var(--color-hop-700);
+  --accent-tint: var(--color-hop-100);
+  --accent-wash: var(--color-hop-50);
+
+  --danger: var(--color-brick-600);
+  --danger-tint: var(--color-brick-100);
+  --highlight: var(--color-amber-600);
+  --highlight-tint: var(--color-amber-100);
+
+  --border-default: var(--color-line);
+  --border-strong: var(--color-line-strong);
+  --border-soft: var(--color-line-soft);
+
+  /* Focus ring for touch/keyboard */
+  --focus-ring: 0 0 0 3px var(--color-hop-300);
+
+  /* ---- Elevation: deliberately FLAT ---- */
+  --shadow-hairline: 0 1px 0 rgba(27, 32, 29, 0.04);
+  --shadow-panel: -1px 0 0 var(--color-line-strong);
+  --shadow-raised: 0 2px 6px rgba(27, 32, 29, 0.06);
+  --shadow-pressed: inset 0 2px 4px rgba(27, 32, 29, 0.12);
+
+  /* ---- Motion ---- */
+  --dur-fast: 90ms;
+  --dur-base: 150ms;
+
+  /* ---- Touch targets / layout constants ---- */
+  --touch-min: 48px;
+  --touch-fn: 72px;
+  --tile-min-h: 120px;
+  --cattab-h: 60px;
+  --rail-w: 136px;
+  --rail-item-h: 104px;
+  --numpad-w: 248px;
+  --receipt-w: 520px;
+  --topbar-h: 76px;
+
+  /* ---- Numeric feature: tabular, lining figures ---- */
+  --numeric-features: "tnum" 1, "lnum" 1, "cv05" 1;
+
+  /* ---- Legacy 5-token aliases (untouched routes: error/offline/preview) ---- */
+  --color-brand: var(--color-hop-600);
+  --color-surface: var(--color-offwhite);
+  --color-surface-fg: var(--color-charcoal-900);
+  --color-accent: var(--color-amber-600);
+  --color-border: var(--color-line);
 }
-[data-theme="neutral"] {
-  --color-brand: oklch(0.55 0.02 250);
-  --color-surface: oklch(0.99 0 0);
-  --color-surface-fg: oklch(0.15 0 0);
-  --color-accent: oklch(0.65 0.05 250);
-  --color-border: oklch(0.9 0 0);
+
+/* ---- White-label accent override (Thema: hop / brick / amber / antraciet).
+   data-theme stays the runtime switch; only the action accent re-tints.
+   DB preset names (8, check-constrained) map onto the H&B accent set. ---- */
+[data-theme="autumn"] {
+  --accent: var(--color-brick-600);
+  --accent-hover: var(--color-brick-700);
+  --accent-tint: var(--color-brick-100);
+  --accent-wash: #F9EFEC;
+  --color-brand: var(--color-brick-600);
 }
 [data-theme="warm-grey"] {
-  --color-brand: oklch(0.48 0.03 60);
-  --color-surface: oklch(0.96 0.01 60);
-  --color-surface-fg: oklch(0.2 0.01 60);
-  --color-accent: oklch(0.6 0.06 50);
-  --color-border: oklch(0.87 0.01 60);
+  --accent: var(--color-amber-600);
+  --accent-hover: #A86F12;
+  --accent-tint: var(--color-amber-100);
+  --accent-wash: #FAF3E3;
+  --color-brand: var(--color-amber-600);
+}
+[data-theme="neutral"] {
+  --accent: var(--color-charcoal-800);
+  --accent-hover: var(--color-charcoal-900);
+  --accent-tint: #E2E3DF;
+  --accent-wash: #EEEFEC;
+  --color-brand: var(--color-charcoal-800);
 }
 [data-theme="blueprint"] {
-  --color-brand: oklch(0.5 0.18 240);
-  --color-surface: oklch(0.99 0.005 240);
-  --color-surface-fg: oklch(0.15 0.02 240);
-  --color-accent: oklch(0.68 0.12 220);
-  --color-border: oklch(0.88 0.02 240);
+  --accent: #3B5E8C;
+  --accent-hover: #324F77;
+  --accent-tint: color-mix(in oklab, #3B5E8C 16%, white);
+  --accent-wash: color-mix(in oklab, #3B5E8C 8%, white);
+  --color-brand: #3B5E8C;
 }
 [data-theme="midnight"] {
-  --color-brand: oklch(0.7 0.18 280);
-  --color-surface: oklch(0.18 0.02 270);
-  --color-surface-fg: oklch(0.95 0.01 270);
-  --color-accent: oklch(0.75 0.15 220);
-  --color-border: oklch(0.3 0.02 270);
+  --accent: #4C466E;
+  --accent-hover: #3E395C;
+  --accent-tint: color-mix(in oklab, #4C466E 16%, white);
+  --accent-wash: color-mix(in oklab, #4C466E 8%, white);
+  --color-brand: #4C466E;
 }
 [data-theme="spring"] {
-  --color-brand: oklch(0.7 0.18 130);
-  --color-surface: oklch(0.99 0.01 130);
-  --color-surface-fg: oklch(0.2 0.02 130);
-  --color-accent: oklch(0.78 0.14 100);
-  --color-border: oklch(0.88 0.02 130);
-}
-[data-theme="autumn"] {
-  --color-brand: oklch(0.6 0.2 50);
-  --color-surface: oklch(0.97 0.015 80);
-  --color-surface-fg: oklch(0.2 0.02 50);
-  --color-accent: oklch(0.7 0.15 30);
-  --color-border: oklch(0.85 0.02 80);
+  --accent: var(--color-hop-500);
+  --accent-hover: var(--color-hop-600);
+  --accent-tint: var(--color-hop-100);
+  --accent-wash: var(--color-hop-50);
+  --color-brand: var(--color-hop-500);
 }
 [data-theme="festival"] {
-  --color-brand: oklch(0.7 0.25 350);
-  --color-surface: oklch(0.99 0.01 350);
-  --color-surface-fg: oklch(0.18 0.03 350);
-  --color-accent: oklch(0.8 0.2 130);
-  --color-border: oklch(0.88 0.02 350);
+  --accent: #A8527E;
+  --accent-hover: #8E446A;
+  --accent-tint: color-mix(in oklab, #A8527E 16%, white);
+  --accent-wash: color-mix(in oklab, #A8527E 8%, white);
+  --color-brand: #A8527E;
+}
+[data-theme="brick"], [data-accent="brick"] {
+  --accent: var(--color-brick-600);
+  --accent-hover: var(--color-brick-700);
+  --accent-tint: var(--color-brick-100);
+  --accent-wash: #F9EFEC;
+  --color-brand: var(--color-brick-600);
+}
+[data-theme="amber"], [data-accent="amber"] {
+  --accent: var(--color-amber-600);
+  --accent-hover: #A86F12;
+  --accent-tint: var(--color-amber-100);
+  --accent-wash: #FAF3E3;
+  --color-brand: var(--color-amber-600);
+}
+[data-theme="antraciet"], [data-accent="antraciet"] {
+  --accent: var(--color-charcoal-800);
+  --accent-hover: var(--color-charcoal-900);
+  --accent-tint: #E2E3DF;
+  --accent-wash: #EEEFEC;
+  --color-brand: var(--color-charcoal-800);
+}
+
+/* Utility: opt any price/quantity/time element into tabular figures.
+   nowrap so "€ 9,50" never line-breaks. */
+.hb-tabular {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: var(--numeric-features);
+  white-space: nowrap;
+}
+
+/* CFD ready-card pulse: gentle scale 1 → 1.025, 1.6s. */
+@keyframes hb-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); }
+}
+.hb-pulse {
+  animation: hb-pulse 1.6s var(--ease-out) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hb-pulse { animation: none; }
 }
 
 html, body {
-  background: var(--color-surface);
-  color: var(--color-surface-fg);
+  background: var(--bg-app);
+  color: var(--text-body);
   font-family: var(--font-sans);
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
+
+/* Visible focus for touch/keyboard without default outlines fighting the ring */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }

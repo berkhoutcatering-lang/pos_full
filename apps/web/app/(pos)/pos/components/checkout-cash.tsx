@@ -2,15 +2,19 @@
 import { useMemo, useState } from "react"
 import type { PricedCart } from "@/lib/pos/types"
 import { computeCashChange, roundToFiveCent } from "@/lib/pos/cash"
+import { Button } from "@/components/ui/button"
+import { euroCents } from "@/lib/format"
 
 export function CheckoutCash({
   priced,
   busy,
+  error,
   onPay,
   onBack,
 }: {
   priced: PricedCart
   busy: boolean
+  error: string | null
   onPay: () => void
   onBack: () => void
 }) {
@@ -37,56 +41,75 @@ export function CheckoutCash({
   ]
 
   return (
-    <>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Contant betalen</h2>
-        <button onClick={onBack} className="text-sm opacity-70 underline">
-          Terug
-        </button>
+    <div>
+      <div className="mb-5 flex items-baseline justify-between">
+        <span className="text-[20px] font-semibold leading-none text-charcoal-500">
+          Te betalen{" "}
+          <span className="hb-tabular text-[14px]">
+            (afgerond {euroCents(rounded)})
+          </span>
+        </span>
+        <span className="hb-tabular text-[40px] font-extrabold leading-none text-charcoal-900">
+          {euroCents(priced.total_incl_cents)}
+        </span>
       </div>
-      <p className="mb-3 text-sm">
-        Totaal{" "}
-        <strong>€{(priced.total_incl_cents / 100).toFixed(2)}</strong> — afgerond op
-        5 cent: <strong>€{(rounded / 100).toFixed(2)}</strong>
-      </p>
 
-      <label className="mb-2 block text-sm">
-        Ontvangen
+      <label className="mb-3 block">
+        <span className="mb-2 block text-[13px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+          Ontvangen
+        </span>
         <input
           inputMode="decimal"
           value={given}
           onChange={(e) => setGiven(e.target.value)}
           placeholder="0,00"
-          className="mt-1 w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-right text-2xl font-semibold"
+          className="hb-tabular h-[60px] w-full rounded-md border border-line-strong bg-paper-bright px-[18px] text-right text-[30px] font-bold text-charcoal-900 outline-none placeholder:text-charcoal-300"
         />
       </label>
 
-      <div className="mb-4 grid grid-cols-4 gap-2">
+      <div className="mb-5 grid grid-cols-4 gap-2.5">
         {quick.map((q) => (
           <button
             key={q}
-            onClick={() => setGiven((q / 100).toFixed(2))}
-            className="min-h-[56px] rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-base"
+            type="button"
+            onClick={() => setGiven((q / 100).toFixed(2).replace(".", ","))}
+            className="hb-tabular min-h-14 rounded-md border border-line-strong bg-paper-bright px-2 text-[18px] font-bold text-charcoal-900 transition-[background] duration-[var(--dur-fast)] hover:bg-offwhite"
           >
-            €{(q / 100).toFixed(2)}
+            {euroCents(q)}
           </button>
         ))}
       </div>
 
-      <p className="mb-4 text-lg">
-        Wisselgeld:{" "}
-        <strong>
-          {calc ? `€${(calc.change_cents / 100).toFixed(2)}` : "—"}
-        </strong>
-      </p>
+      <div className="mb-5 flex items-baseline justify-between border-t border-line pt-4">
+        <span className="text-[20px] font-bold leading-none text-charcoal-900">
+          Wisselgeld
+        </span>
+        <span className="hb-tabular text-[36px] font-extrabold leading-none text-hop-700">
+          {calc ? euroCents(calc.change_cents) : "—"}
+        </span>
+      </div>
 
-      <button
-        disabled={busy || !calc}
-        onClick={onPay}
-        className="min-h-[72px] w-full rounded-xl bg-[var(--color-brand)] p-3 text-lg font-semibold text-white disabled:opacity-40"
-      >
-        {busy ? "Bezig…" : "Bevestig contante betaling"}
-      </button>
-    </>
+      {error ? (
+        <p role="alert" className="mb-4 rounded-md bg-brick-100 px-4 py-3 text-[15px] font-semibold text-brick-600">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex gap-3">
+        <Button variant="secondary" size="lg" onClick={onBack} className="flex-none">
+          Terug
+        </Button>
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          disabled={busy || !calc}
+          onClick={onPay}
+          data-testid="cash-confirm"
+        >
+          {busy ? "Bezig…" : "Bevestig contante betaling"}
+        </Button>
+      </div>
+    </div>
   )
 }

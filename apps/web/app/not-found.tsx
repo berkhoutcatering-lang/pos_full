@@ -12,7 +12,7 @@ export default function NotFound() {
         </p>
         <Link
           href="/"
-          className="mt-4 inline-block min-h-[56px] rounded-xl bg-[var(--color-brand)] px-6 py-4 font-semibold text-white"
+          className="mt-4 inline-block min-h-[56px] rounded-md bg-hop-600 px-6 py-4 font-bold text-white transition-[background] duration-[var(--dur-fast)] hover:bg-hop-700"
         >
           Naar start
         </Link>

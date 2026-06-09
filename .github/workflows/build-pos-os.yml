@@ -1,0 +1,37 @@
+name: Build Hop & Bites POS OS image
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "pos-os-v*"
+
+jobs:
+  build-image:
+    # Native arm64 runner: pi-gen builds without QEMU emulation (~3-5x
+    # faster than amd64). Free for public repos; private repos need a
+    # paid runner plan for arm64.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc || true
+          df -h /
+
+      - name: Build image (pi-gen via Docker, native arm64)
+        env:
+          POS_OS_PASSWORD: ${{ secrets.POS_OS_PASSWORD || 'hopbites2026' }}
+        run: |
+          chmod +x raspberry-pos-os/build.sh raspberry-pos-os/prepare-stage.sh
+          ./raspberry-pos-os/build.sh
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hopbites-pos-os
+          path: raspberry-pos-os/deploy/*.img.xz
+          if-no-files-found: error
+          retention-days: 14

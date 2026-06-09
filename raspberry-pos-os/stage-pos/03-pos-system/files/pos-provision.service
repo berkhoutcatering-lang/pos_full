@@ -1,0 +1,12 @@
+[Unit]
+Description=Hop & Bites POS boot provisioning (pos.env -> system config)
+After=local-fs.target NetworkManager.service
+Before=pi-bridge.service pos-kiosk.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/pos-provision.sh
+
+[Install]
+WantedBy=multi-user.target

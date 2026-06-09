@@ -1,0 +1,21 @@
+# pi-gen config for the Hop & Bites POS OS image (sourced by pi-gen's build.sh).
+# build.sh copies this to .pi-gen/config. Override the login password at build
+# time with: POS_OS_PASSWORD=... ./build.sh
+IMG_NAME="hopbites-pos-os"
+RELEASE="bookworm"
+DEPLOY_COMPRESSION="xz"
+COMPRESSION_LEVEL="6"
+
+ENABLE_SSH="1"
+TARGET_HOSTNAME="hopbites"
+FIRST_USER_NAME="hopbites"
+FIRST_USER_PASS="${POS_OS_PASSWORD:-hopbites2026}"
+DISABLE_FIRST_BOOT_USER_RENAME="1"
+
+LOCALE_DEFAULT="nl_NL.UTF-8"
+KEYBOARD_KEYMAP="us"
+KEYBOARD_LAYOUT="English (US)"
+TIMEZONE_DEFAULT="Europe/Amsterdam"
+WPA_COUNTRY="NL"
+
+STAGE_LIST="stage0 stage1 stage2 stage-pos"

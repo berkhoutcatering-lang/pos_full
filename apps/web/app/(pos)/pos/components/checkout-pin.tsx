@@ -1,22 +1,23 @@
 "use client"
 import { useState } from "react"
-import type { PricedCart } from "@/lib/pos/types"
 import { pollMyPosViaPi, startMyPosViaPi } from "@/lib/pi-bridge/client"
+import { Button } from "@/components/ui/button"
+import { euroCents } from "@/lib/format"
 
 type PinPhase = "idle" | "starting" | "polling" | "approved" | "declined" | "error"
 
 export function CheckoutPin({
-  priced: _priced,
   busy,
+  error: payError,
   onPay,
   onBack,
   venueAmount,
   orderId,
   pinIdempotencyKey,
 }: {
-  priced: PricedCart
   busy: boolean
-  onPay: () => void
+  error: string | null
+  onPay: () => Promise<void> | void
   onBack: () => void
   venueAmount: number
   orderId: string
@@ -67,55 +68,80 @@ export function CheckoutPin({
   }
 
   return (
-    <>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-xl font-semibold">PIN — myPOS</h2>
-        <button onClick={onBack} className="text-sm opacity-70 underline">
-          Terug
-        </button>
+    <div>
+      <div className="mb-6 flex items-baseline justify-between">
+        <span className="text-[20px] font-semibold leading-none text-charcoal-500">
+          Te betalen
+        </span>
+        <span className="hb-tabular text-[40px] font-extrabold leading-none text-charcoal-900">
+          {euroCents(venueAmount)}
+        </span>
       </div>
-      <p className="mb-3 text-sm">
-        Te betalen: <strong>€{(venueAmount / 100).toFixed(2)}</strong>
-      </p>
+
       {phase === "idle" ? (
-        <button
-          disabled={busy}
-          onClick={startPin}
-          className="min-h-[72px] w-full rounded-xl bg-[var(--color-brand)] p-3 text-lg font-semibold text-white"
-        >
-          Start PIN-transactie
-        </button>
+        <div className="flex gap-3">
+          <Button variant="secondary" size="lg" onClick={onBack} className="flex-none">
+            Terug
+          </Button>
+          <Button variant="primary" size="lg" fullWidth disabled={busy} onClick={startPin}>
+            Start PIN-transactie
+          </Button>
+        </div>
       ) : null}
+
       {phase === "starting" ? (
-        <p className="opacity-70">Verbinden met myPOS terminal…</p>
+        <Status text="Verbinden met myPOS terminal…" />
       ) : null}
       {phase === "polling" ? (
-        <p>Wacht op klant — biep voor pinpas… ({transactionId?.slice(0, 8)}…)</p>
+        <Status
+          text={`Wacht op klant — houd de kaart bij de terminal… (${transactionId?.slice(0, 8)}…)`}
+          pulse
+        />
       ) : null}
       {phase === "approved" ? (
-        <p className="text-emerald-700">Goedgekeurd — bestelling wordt geplaatst…</p>
+        <Status text="Goedgekeurd — bestelling wordt geplaatst…" accent />
       ) : null}
+
       {phase === "declined" ? (
-        <button
-          onClick={() => setPhase("idle")}
-          className="min-h-[72px] w-full rounded-xl bg-[var(--color-brand)] p-3 text-lg font-semibold text-white"
-        >
+        <Button variant="primary" size="lg" fullWidth onClick={() => setPhase("idle")}>
           Geweigerd — opnieuw proberen
-        </button>
+        </Button>
       ) : null}
-      {phase === "error" ? (
-        <>
-          <p className="mb-3 text-sm text-red-700" role="alert">
-            {error}
-          </p>
-          <button
-            onClick={() => setPhase("idle")}
-            className="min-h-[64px] w-full rounded-xl border border-[var(--color-border)] p-3"
-          >
-            Opnieuw
-          </button>
-        </>
+
+      {phase === "error" || payError ? (
+        <div className="mt-4">
+          {error || payError ? (
+            <p role="alert" className="mb-4 rounded-md bg-brick-100 px-4 py-3 text-[15px] font-semibold text-brick-600">
+              {error ?? payError}
+            </p>
+          ) : null}
+          {phase === "error" ? (
+            <Button variant="secondary" size="lg" fullWidth onClick={() => setPhase("idle")}>
+              Opnieuw
+            </Button>
+          ) : null}
+        </div>
       ) : null}
-    </>
+    </div>
+  )
+}
+
+function Status({
+  text,
+  accent = false,
+  pulse = false,
+}: {
+  text: string
+  accent?: boolean
+  pulse?: boolean
+}) {
+  return (
+    <p
+      className={`flex min-h-16 items-center justify-center rounded-md border border-line px-5 text-center text-[17px] font-semibold ${
+        accent ? "text-hop-700" : "text-charcoal-800"
+      } ${pulse ? "animate-pulse motion-reduce:animate-none" : ""}`}
+    >
+      {text}
+    </p>
   )
 }

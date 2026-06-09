@@ -1,5 +1,18 @@
 "use client"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
+import {
+  Bell,
+  BellOff,
+  Check,
+  CheckCheck,
+  ChefHat,
+  Flame,
+  HandPlatter,
+  Inbox,
+  LayoutGrid,
+  Play,
+} from "lucide-react"
 import { ulid } from "ulid"
 import { subscribeToVenueOrders } from "@/lib/pos/realtime-subscribe"
 import { updateOrderStateViaPi } from "@/lib/pi-bridge/client"
@@ -264,31 +277,81 @@ export function KdsShell({
   )
 
   return (
-    <div className="flex h-dvh flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--color-border)] p-3">
-        <h1 className="text-xl font-bold">Keuken</h1>
-        <StationFilter
-          stations={[...STATIONS_DEFAULT]}
-          active={station}
-          onChange={setStation}
-        />
-        <button
-          onClick={() => setSoundOn((v) => !v)}
-          className="inline-flex h-9 min-w-[88px] items-center justify-center rounded-full border border-[var(--color-border)] px-3 text-xs"
-          aria-pressed={soundOn}
-          aria-label={soundOn ? "Geluid uitzetten" : "Geluid aanzetten"}
+    <div className="flex h-dvh flex-col bg-offwhite">
+      {/* 84px charcoal header */}
+      <div className="flex h-[84px] flex-none items-center gap-5 bg-charcoal-900 px-6 text-offwhite">
+        <Link
+          href="/"
+          title="Naar start"
+          className="flex h-12 w-12 flex-none items-center justify-center rounded-[12px] bg-white/8 text-offwhite"
         >
-          {soundOn ? "🔔 Geluid aan" : "🔕 Geluid uit"}
-        </button>
-        <ConnectionChip />
+          <LayoutGrid size={22} />
+        </Link>
+        <div className="flex items-center gap-3">
+          <ChefHat size={28} className="text-hop-500" />
+          <h1 className="text-[26px] font-extrabold leading-none">Keuken</h1>
+        </div>
+        <div className="ml-3">
+          <StationFilter
+            stations={[...STATIONS_DEFAULT]}
+            active={station}
+            onChange={setStation}
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-3.5">
+          <span className="hb-tabular text-[15px] font-bold leading-none text-charcoal-300">
+            {visible.length} open bonnen
+          </span>
+          <button
+            onClick={() => setSoundOn((v) => !v)}
+            className={`inline-flex h-11 items-center gap-2 rounded-md border border-charcoal-700 bg-transparent px-4 text-[14px] font-bold leading-none ${
+              soundOn ? "text-hop-500" : "text-charcoal-400"
+            }`}
+            aria-pressed={soundOn}
+            aria-label={soundOn ? "Geluid uitzetten" : "Geluid aanzetten"}
+          >
+            {soundOn ? <Bell size={18} /> : <BellOff size={18} />}
+            {soundOn ? "Geluid aan" : "Geluid uit"}
+          </button>
+          <ConnectionChip />
+        </div>
         <span hidden aria-hidden>
           {status}
         </span>
       </div>
-      <div className="grid flex-1 grid-cols-1 gap-3 overflow-auto p-3 md:grid-cols-3">
-        <Column title="Geplaatst" orders={columns.placed} onBump={handleBump} nextStatus="preparing" />
-        <Column title="In bereiding" orders={columns.preparing} onBump={handleBump} nextStatus="ready" />
-        <Column title="Klaar" orders={columns.ready} onBump={handleBump} nextStatus="served" />
+
+      {/* Three status columns */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 md:grid-cols-3">
+        <Column
+          title="Geplaatst"
+          icon={<Inbox size={20} className="text-charcoal-700" />}
+          accent="var(--color-charcoal-500)"
+          orders={columns.placed}
+          onBump={handleBump}
+          nextStatus="preparing"
+          nextLabel="Start bereiding"
+          nextIcon={<Play size={22} />}
+        />
+        <Column
+          title="In bereiding"
+          icon={<Flame size={20} className="text-charcoal-700" />}
+          accent="var(--color-amber-600)"
+          orders={columns.preparing}
+          onBump={handleBump}
+          nextStatus="ready"
+          nextLabel="Klaar"
+          nextIcon={<Check size={22} />}
+        />
+        <Column
+          title="Klaar"
+          icon={<HandPlatter size={20} className="text-charcoal-700" />}
+          accent="var(--color-hop-600)"
+          orders={columns.ready}
+          onBump={handleBump}
+          nextStatus="served"
+          nextLabel="Uitgegeven"
+          nextIcon={<HandPlatter size={22} />}
+        />
       </div>
     </div>
   )
@@ -296,36 +359,51 @@ export function KdsShell({
 
 function Column({
   title,
+  icon,
+  accent,
   orders,
   onBump,
   nextStatus,
+  nextLabel,
+  nextIcon,
 }: {
   title: string
+  icon: React.ReactNode
+  accent: string
   orders: ActiveOrder[]
   onBump: (id: string, to: "preparing" | "ready" | "served") => void
   nextStatus: "preparing" | "ready" | "served"
+  nextLabel: string
+  nextIcon: React.ReactNode
 }) {
   return (
-    <section className="flex flex-col">
-      <h2 className="mb-2 text-base font-semibold uppercase tracking-wide opacity-80">
-        {title} ({orders.length})
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-paper">
+      <h2 className="flex flex-none items-center gap-2.5 border-b border-line px-[18px] py-3.5 text-[18px] font-extrabold leading-[1.1] tracking-[0.02em] text-charcoal-900">
+        <span
+          className="h-3 w-3 flex-none rounded-[3px]"
+          style={{ background: accent }}
+        />
+        {icon}
+        <span className="whitespace-nowrap">{title}</span>
+        <span className="hb-tabular ml-auto text-[16px] font-extrabold leading-none text-charcoal-500">
+          {orders.length}
+        </span>
       </h2>
-      <div className="flex flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-3.5">
         {orders.length === 0 ? (
-          <p className="text-sm opacity-60">—</p>
+          <div className="m-auto flex flex-col items-center gap-2 text-charcoal-300">
+            <CheckCheck size={40} />
+            <span className="text-[15px] font-semibold leading-none">Niets hier</span>
+          </div>
         ) : (
           orders.map((o) => (
             <OrderCard
               key={o.id}
               order={o}
+              accent={accent}
               onBump={() => onBump(o.id, nextStatus)}
-              nextLabel={
-                nextStatus === "preparing"
-                  ? "Start bereiding"
-                  : nextStatus === "ready"
-                    ? "Klaar"
-                    : "Uitgegeven"
-              }
+              nextLabel={nextLabel}
+              nextIcon={nextIcon}
             />
           ))
         )}

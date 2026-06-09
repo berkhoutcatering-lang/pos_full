@@ -1,6 +1,7 @@
 import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { createClient } from "@/lib/supabase/server"
 import { PRESETS } from "@/lib/dal/theme"
+import { PageHead } from "@/components/admin/page-head"
 import { ThemeView } from "./theme-view"
 
 export const dynamic = "force-dynamic"
@@ -16,10 +17,11 @@ export default async function ThemePage() {
     .maybeSingle()
   return (
     <section>
-      <h2 className="mb-4 text-2xl font-bold">Thema</h2>
-      <p className="mb-3 text-sm opacity-70">
-        Kies een preset of override tokens per organisatie. White-label voor SaaS.
-      </p>
+      <PageHead
+        eyebrow="Beheer"
+        title="Thema"
+        sub="Pas het accent en logo aan voor klant-schermen. Wijzigingen zijn meteen zichtbaar in de preview."
+      />
       <ThemeView
         current={{
           preset: (data?.preset as string) ?? "hopbites",

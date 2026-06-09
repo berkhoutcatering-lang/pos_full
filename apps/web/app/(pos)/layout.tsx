@@ -9,7 +9,7 @@ import { requireAuth } from "@/lib/dal/auth"
 export default async function PosLayout({ children }: { children: ReactNode }) {
   await requireAuth()
   return (
-    <div className="min-h-dvh bg-[var(--color-surface)] text-[var(--color-surface-fg)]">
+    <div className="min-h-dvh bg-offwhite text-charcoal-800">
       {children}
     </div>
   )

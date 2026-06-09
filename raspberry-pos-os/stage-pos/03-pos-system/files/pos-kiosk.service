@@ -1,0 +1,24 @@
+[Unit]
+Description=Hop & Bites kiosk (Chromium fullscreen on HDMI)
+After=systemd-user-sessions.service pos-provision.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/pos/kiosk.url
+Conflicts=getty@tty1.service
+
+[Service]
+User=kiosk
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+UtmpIdentifier=tty1
+ExecStart=/usr/local/bin/pos-kiosk.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

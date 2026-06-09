@@ -1,0 +1,25 @@
+[Unit]
+Description=Hop & Bites Pi-bridge (native)
+Wants=network-online.target avahi-daemon.service
+After=network-online.target avahi-daemon.service time-sync.target pos-provision.service
+ConditionPathExists=!/run/pos/config-invalid
+
+[Service]
+Type=simple
+User=posbridge
+Group=posbridge
+EnvironmentFile=/etc/pi-bridge/env
+WorkingDirectory=/opt/pi-bridge
+ExecStart=/usr/bin/node /opt/pi-bridge/dist/index.js
+Restart=always
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/data /var/lib/pi-bridge
+
+[Install]
+WantedBy=multi-user.target

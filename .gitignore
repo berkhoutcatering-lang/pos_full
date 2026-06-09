@@ -38,3 +38,8 @@ apps/web/public/workbox-*.js.map
 # TypeScript / Next generated
 *.tsbuildinfo
 next-env.d.ts
+
+# Raspberry POS OS image build
+raspberry-pos-os/.pi-gen/
+raspberry-pos-os/deploy/
+raspberry-pos-os/stage-pos/02-pi-bridge/files/pi-bridge-src/

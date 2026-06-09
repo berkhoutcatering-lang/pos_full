@@ -1,5 +1,6 @@
 import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { listOperationalItems } from "@/lib/dal/operational-items"
+import { PageHead } from "@/components/admin/page-head"
 import { VoorraadView } from "./voorraad-view"
 
 export const dynamic = "force-dynamic"
@@ -13,11 +14,11 @@ export default async function VoorraadPage() {
   })
   return (
     <section>
-      <h2 className="mb-4 text-2xl font-bold">Voorraad</h2>
-      <p className="mb-3 text-sm opacity-70">
-        Tijdens een rush: tik snel +/− om de teller bij te werken. Werkt
-        ook offline via de Pi-bridge.
-      </p>
+      <PageHead
+        eyebrow="Operationeel · werkt offline"
+        title="Voorraad"
+        sub="Tel en corrigeer voorraad per item. Bij 0 verdwijnt het item automatisch van de kassa."
+      />
       <VoorraadView initial={items} orgId={claims.orgId} venueId={claims.venueId} />
     </section>
   )

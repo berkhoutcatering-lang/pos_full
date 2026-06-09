@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
-import type { Route } from "next"
-import Link from "next/link"
-import { requireRole } from "@/lib/dal/auth"
+import { requireRole, requireVenue } from "@/lib/dal/auth"
+import { createClient } from "@/lib/supabase/server"
+import { AdminSidebar } from "@/components/admin/admin-sidebar"
 import { ConnectionChip } from "@/components/connection-chip"
 
 // Sidebar split: "Operationeel" (Pi-bridge first, blijft tijdens outage)
@@ -16,72 +16,32 @@ export default async function AdminLayout({
   children: ReactNode
 }) {
   await requireRole("manager")
+  const claims = await requireVenue()
+  const supabase = await createClient()
+  const { data: venue } = await supabase
+    .from("venues")
+    .select("name")
+    .eq("id", claims.venueId)
+    .maybeSingle()
+
   return (
-    <div className="grid min-h-dvh grid-cols-[220px_1fr] bg-[var(--color-surface)] text-[var(--color-surface-fg)]">
-      <aside className="border-r border-[var(--color-border)] p-4">
-        <h1 className="mb-4 text-lg font-bold text-[var(--color-brand)]">
-          Hop &amp; Bites
-        </h1>
-
-        <nav className="flex flex-col gap-1 text-sm">
-          <NavLink href="/admin">Dashboard</NavLink>
-
-          <NavHeader>Operationeel</NavHeader>
-          <NavLink href="/admin/operational/voorraad" offlineCapable>Voorraad</NavLink>
-          <NavLink href="/admin/operational/availability" offlineCapable>Beschikbaarheid</NavLink>
-          <NavLink href="/admin/operational/prijs" offlineCapable>Prijs (tijdelijk)</NavLink>
-          <NavLink href="/admin/operational/devices" offlineCapable>Apparaten</NavLink>
-          <NavLink href="/admin/operational/dagafsluiting" offlineCapable>Dagafsluiting</NavLink>
-
-          <NavHeader>Beheer</NavHeader>
-          <NavLink href="/admin/menu">Menu</NavLink>
-          <NavLink href="/admin/staff">Personeel</NavLink>
-          <NavLink href="/admin/theme">Thema</NavLink>
-          <NavLink href="/admin/usage">AI-gebruik</NavLink>
-          <NavLink href="/admin/audit">Audit log</NavLink>
-          <NavLink href="/admin/chat">AI-chat</NavLink>
-        </nav>
-      </aside>
-      <main className="relative p-6">
-        <div className="absolute right-6 top-4">
-          <ConnectionChip />
+    <div className="grid min-h-dvh grid-cols-[260px_1fr] bg-offwhite text-charcoal-800">
+      <AdminSidebar />
+      <main className="min-h-0 overflow-y-auto px-10 py-8">
+        {/* Topline */}
+        <div className="mb-7 flex items-center justify-between">
+          <div className="text-[14px] font-semibold leading-none text-charcoal-500">
+            {venue?.name ?? "Hop & Bites"}
+          </div>
+          <div className="flex items-center gap-3.5">
+            <ConnectionChip onLight />
+            <div className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-hop-600 text-[15px] font-bold leading-none text-white">
+              {claims.role.charAt(0).toUpperCase()}
+            </div>
+          </div>
         </div>
         {children}
       </main>
     </div>
-  )
-}
-
-function NavHeader({ children }: { children: ReactNode }) {
-  return (
-    <div className="mt-4 px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider opacity-50">
-      {children}
-    </div>
-  )
-}
-
-function NavLink({
-  href,
-  children,
-  offlineCapable = false,
-}: {
-  href: Route
-  children: ReactNode
-  offlineCapable?: boolean
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center justify-between rounded px-3 py-2 hover:bg-[color-mix(in_oklch,var(--color-accent)_15%,transparent)]"
-    >
-      <span>{children}</span>
-      {offlineCapable ? (
-        <span
-          className="inline-block size-2 rounded-full bg-emerald-500"
-          aria-label="Werkt offline via Pi-bridge"
-          title="Werkt offline via Pi-bridge"
-        />
-      ) : null}
-    </Link>
   )
 }

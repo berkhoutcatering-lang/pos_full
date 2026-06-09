@@ -1,5 +1,6 @@
 import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { createClient } from "@/lib/supabase/server"
+import { PageHead } from "@/components/admin/page-head"
 import { StaffView } from "./staff-view"
 
 export const dynamic = "force-dynamic"
@@ -23,7 +24,11 @@ export default async function StaffPage() {
   }))
   return (
     <section>
-      <h2 className="mb-4 text-2xl font-bold">Personeel</h2>
+      <PageHead
+        eyebrow="Beheer"
+        title="Personeel"
+        sub="Wie mag inloggen op kassa, keuken en beheer."
+      />
       <StaffView rows={rows} />
     </section>
   )

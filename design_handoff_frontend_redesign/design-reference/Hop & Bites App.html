@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop &amp; Bites — App</title>
+<link rel="stylesheet" href="../_ds/pos-c232d86a-4c35-4bf0-a24a-999ecd1a4714/styles.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #141714; }
+  body { overflow: hidden; font-family: var(--font-sans); }
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  /* Prices/totals (DS + ours) use .hb-tabular — never let "€ 9,50" break at the space. */
+  .hb-tabular { white-space: nowrap; }
+  @keyframes hbPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.025); } }
+  .hb-pulse { animation: hbPulse 1.6s var(--ease-out) infinite; }
+  @media (prefers-reduced-motion: reduce) { .hb-pulse { animation: none; } }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #8C9289; font: 600 16px/1 system-ui, sans-serif; }
+</style>
+</head>
+<body>
+  <div id="loading">Hop &amp; Bites laden…</div>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <script src="../_ds/pos-c232d86a-4c35-4bf0-a24a-999ecd1a4714/_ds_bundle.js"></script>
+  <script src="app/menu.js"></script>
+
+  <script type="text/babel" data-presets="react" src="app/shared.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app/auth.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app/kassa.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app/keuken.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app/cfd.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app/admin.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app/admin-pages.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app/root.jsx"></script>
+
+  <script type="text/babel" data-presets="react">
+    function mount() {
+      if (!window.Root || !window.HopBitesDesignSystem_c232d8 || !window.lucide) { setTimeout(mount, 30); return; }
+      const l = document.getElementById("loading"); if (l) l.remove();
+      ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
+    }
+    mount();
+  </script>
+</body>
+</html>
