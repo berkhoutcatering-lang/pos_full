@@ -1,0 +1,28 @@
+[Unit]
+Description=Hop Bites Pi-bridge
+After=network-online.target avahi-daemon.service docker.service
+Wants=network-online.target avahi-daemon.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=hopbites
+Group=hopbites
+WorkingDirectory=/opt/pi-bridge
+EnvironmentFile=/etc/pi-bridge/env
+ExecStartPre=-/usr/bin/docker pull ghcr.io/hopbites/pi-bridge:latest
+ExecStartPre=-/usr/bin/docker rm -f pi-bridge
+ExecStart=/usr/bin/docker run --rm \
+  --name pi-bridge \
+  --network host \
+  --env-file /etc/pi-bridge/env \
+  -v /var/lib/pi-bridge:/data \
+  -v /etc/pi-bridge/tls:/tls:ro \
+  ghcr.io/hopbites/pi-bridge:latest
+ExecStop=/usr/bin/docker stop pi-bridge
+Restart=always
+RestartSec=10
+WatchdogSec=60
+
+[Install]
+WantedBy=multi-user.target

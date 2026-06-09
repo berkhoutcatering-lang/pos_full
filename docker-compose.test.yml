@@ -1,0 +1,121 @@
+# Docker test stack voor Phase 5 audit-fix validatie.
+# Geen Pi hardware nodig — alle externe afhankelijkheden zijn mocked.
+#
+# Start:    pwsh scripts/test-stack-up.ps1
+# Stop:     pwsh scripts/test-stack-down.ps1
+# Reset:    pwsh scripts/test-stack-reset.ps1
+# Health:   pwsh scripts/health-check.ps1
+#
+# Pillars covered:
+#   P1 Pi-Edge       — pi-bridge service
+#   P3 PIN-First     — mock-mypos
+#   P5 White-Label   — playwright runs against the kassa shell
+#   (P2/P4 covered by separate vitest + lighthouse, not Docker)
+
+name: hopbites-test
+
+services:
+  pi-bridge:
+    build:
+      context: ./apps/pi-bridge
+      dockerfile: Dockerfile
+    container_name: hb-pi-bridge
+    image: hopbites/pi-bridge:0.0.3
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      HOST: 0.0.0.0
+      NODE_ENV: test
+      ORG_ID: 00000000-0000-0000-0000-000000000001
+      VENUE_ID: 00000000-0000-0000-0000-000000000010
+      SUPABASE_URL: http://host.docker.internal:54321
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-test-service-role}
+      PI_BRIDGE_PAIRING_SECRET: ${PI_BRIDGE_PAIRING_SECRET:-test-pairing-secret-min-32-chars-long}
+      PI_BRIDGE_ADMIN_TOKEN: ${PI_BRIDGE_ADMIN_TOKEN:-test-admin-token-min-32-chars-long-xx}
+      MYPOS_BASE: http://mock-mypos:1080
+      MYPOS_SESSION_SECRET: test-mypos-session
+      MYPOS_PARTNER_ID: test-partner
+      MYPOS_APP_ID: test-app
+      PRINTER_NETWORK_ADDR: mock-printer:9100
+      PRINTER_TYPE: star
+      SQLITE_PATH: /data/pi-bridge.sqlite
+      DISABLE_MDNS: "true"
+      SIMULATE_SUPABASE_OUTAGE: ${SIMULATE_SUPABASE_OUTAGE:-false}
+      MDNS_INTERFACE: ""
+      ALLOWED_ORIGINS: "http://host.docker.internal:3000,http://localhost:3000"
+    volumes:
+      - pi-data:/data
+    depends_on:
+      mock-mypos:
+        condition: service_started
+      mock-printer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/_health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - hopbites-test
+
+  mock-mypos:
+    image: mockserver/mockserver:5.15.0
+    container_name: hb-mock-mypos
+    ports:
+      - "8081:1080"
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/expectations.json
+      MOCKSERVER_LOG_LEVEL: WARN
+    volumes:
+      - ./test/mocks/mypos:/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:1080/mockserver/status", "-X", "PUT"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - hopbites-test
+
+  mock-printer:
+    image: node:22-alpine
+    container_name: hb-mock-printer
+    command: ["node", "/app/printer-mock.js"]
+    working_dir: /app
+    ports:
+      - "9100:9100"
+    volumes:
+      - ./test/mocks/printer:/app:ro
+      - printer-bytes:/output
+    networks:
+      - hopbites-test
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.48.0-jammy
+    container_name: hb-playwright
+    working_dir: /workspace/apps/web
+    command: ["sh", "-c", "pnpm install --frozen-lockfile && pnpm exec playwright test"]
+    environment:
+      E2E_PI_BRIDGE_URL: http://pi-bridge:3001
+      E2E_PI_BRIDGE_ADMIN_TOKEN: ${PI_BRIDGE_ADMIN_TOKEN:-test-admin-token-min-32-chars-long-xx}
+      E2E_APP_URL: http://host.docker.internal:3000
+      CI: "true"
+    volumes:
+      - .:/workspace
+      - playwright-screenshots:/workspace/apps/web/test-results
+    depends_on:
+      pi-bridge:
+        condition: service_healthy
+    networks:
+      - hopbites-test
+    profiles:
+      - e2e
+
+networks:
+  hopbites-test:
+    driver: bridge
+
+volumes:
+  pi-data:
+  printer-bytes:
+  playwright-screenshots:

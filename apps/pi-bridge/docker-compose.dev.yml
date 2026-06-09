@@ -1,0 +1,14 @@
+# Local dev: runs the Pi-bridge with a host-mounted data volume so the
+# SQLite outbox + PGlite cache survive container restarts.
+# Run from apps/pi-bridge/: docker compose -f docker-compose.dev.yml up --build
+services:
+  pi-bridge:
+    build: .
+    container_name: pi-bridge-dev
+    env_file:
+      - .env
+    network_mode: host
+    volumes:
+      - ./.data:/data
+      - ./.tls:/tls:ro
+    restart: unless-stopped

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "create-transaction",
+    "priority": 10,
+    "httpRequest": {
+      "method": "POST",
+      "path": "/transactions"
+    },
+    "httpResponseTemplate": {
+      "template": "{ statusCode: 200, headers: { 'content-type': ['application/json'], 'x-echo-idempotency': [request.headers['idempotency-key'] && request.headers['idempotency-key'][0] || ''] }, body: JSON.stringify({ transaction_id: 'mypos-' + (request.headers['idempotency-key'] && request.headers['idempotency-key'][0] || 'noidem'), status: 'pending', amount: JSON.parse(request.body.string).amount }) }",
+      "templateType": "JAVASCRIPT"
+    }
+  },
+  {
+    "id": "poll-status",
+    "priority": 5,
+    "httpRequest": {
+      "method": "GET",
+      "path": "/transactions/.*"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "body": {
+        "type": "JSON",
+        "json": { "status": "paid" }
+      },
+      "delay": { "timeUnit": "MILLISECONDS", "value": 200 }
+    }
+  },
+  {
+    "id": "refund",
+    "priority": 5,
+    "httpRequest": {
+      "method": "POST",
+      "path": "/transactions/.*/refund"
+    },
+    "httpResponseTemplate": {
+      "template": "{ statusCode: 200, headers: { 'content-type': ['application/json'] }, body: JSON.stringify({ refund_id: 'refund-' + (request.headers['idempotency-key'] && request.headers['idempotency-key'][0] || 'noidem') }) }",
+      "templateType": "JAVASCRIPT"
+    }
+  }
+]

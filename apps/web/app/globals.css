@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  /* Default preset: hopbites — overridden at runtime by org_theme_settings */
+  --color-brand: oklch(0.65 0.22 35);
+  --color-surface: oklch(0.98 0.005 90);
+  --color-surface-fg: oklch(0.18 0.01 90);
+  --color-accent: oklch(0.75 0.15 70);
+  --color-border: oklch(0.88 0.01 90);
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* 8 presets — runtime selected via <html data-theme="..."> */
+[data-theme="hopbites"] {
+  --color-brand: oklch(0.65 0.22 35);
+  --color-surface: oklch(0.98 0.005 90);
+  --color-surface-fg: oklch(0.18 0.01 90);
+  --color-accent: oklch(0.75 0.15 70);
+  --color-border: oklch(0.88 0.01 90);
+}
+[data-theme="neutral"] {
+  --color-brand: oklch(0.55 0.02 250);
+  --color-surface: oklch(0.99 0 0);
+  --color-surface-fg: oklch(0.15 0 0);
+  --color-accent: oklch(0.65 0.05 250);
+  --color-border: oklch(0.9 0 0);
+}
+[data-theme="warm-grey"] {
+  --color-brand: oklch(0.48 0.03 60);
+  --color-surface: oklch(0.96 0.01 60);
+  --color-surface-fg: oklch(0.2 0.01 60);
+  --color-accent: oklch(0.6 0.06 50);
+  --color-border: oklch(0.87 0.01 60);
+}
+[data-theme="blueprint"] {
+  --color-brand: oklch(0.5 0.18 240);
+  --color-surface: oklch(0.99 0.005 240);
+  --color-surface-fg: oklch(0.15 0.02 240);
+  --color-accent: oklch(0.68 0.12 220);
+  --color-border: oklch(0.88 0.02 240);
+}
+[data-theme="midnight"] {
+  --color-brand: oklch(0.7 0.18 280);
+  --color-surface: oklch(0.18 0.02 270);
+  --color-surface-fg: oklch(0.95 0.01 270);
+  --color-accent: oklch(0.75 0.15 220);
+  --color-border: oklch(0.3 0.02 270);
+}
+[data-theme="spring"] {
+  --color-brand: oklch(0.7 0.18 130);
+  --color-surface: oklch(0.99 0.01 130);
+  --color-surface-fg: oklch(0.2 0.02 130);
+  --color-accent: oklch(0.78 0.14 100);
+  --color-border: oklch(0.88 0.02 130);
+}
+[data-theme="autumn"] {
+  --color-brand: oklch(0.6 0.2 50);
+  --color-surface: oklch(0.97 0.015 80);
+  --color-surface-fg: oklch(0.2 0.02 50);
+  --color-accent: oklch(0.7 0.15 30);
+  --color-border: oklch(0.85 0.02 80);
+}
+[data-theme="festival"] {
+  --color-brand: oklch(0.7 0.25 350);
+  --color-surface: oklch(0.99 0.01 350);
+  --color-surface-fg: oklch(0.18 0.03 350);
+  --color-accent: oklch(0.8 0.2 130);
+  --color-border: oklch(0.88 0.02 350);
+}
+
+html, body {
+  background: var(--color-surface);
+  color: var(--color-surface-fg);
+  font-family: var(--font-sans);
+}

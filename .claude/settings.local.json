@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "WebFetch(*)",
+      "WebSearch",
+      "Skill(hopbites-pos-build-skills:hopbites-pos-build-orchestrator)",
+      "Skill(hopbites-pos-build-skills:hopbites-pos-build-foundation)"
+    ],
+    "defaultMode": "bypassPermissions"
+  }
+}
