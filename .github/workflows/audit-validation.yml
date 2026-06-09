@@ -134,16 +134,24 @@ jobs:
   promptfoo-eval:
     name: Promptfoo admin-chat eval
     runs-on: ubuntu-latest
-    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    # `secrets` is not allowed in a job-level `if`; map it to env and guard
+    # the steps instead.
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
+      - name: Skip without ANTHROPIC_API_KEY
+        if: env.ANTHROPIC_API_KEY == ''
+        run: echo "ANTHROPIC_API_KEY secret ontbreekt — eval overgeslagen"
       - uses: actions/checkout@v4
+        if: env.ANTHROPIC_API_KEY != ''
       - uses: actions/setup-node@v4
+        if: env.ANTHROPIC_API_KEY != ''
         with:
           node-version: "22"
       - run: npx -y promptfoo@latest eval -c promptfoo/admin-chat.eval.yaml --output ./promptfoo-results.json
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        if: env.ANTHROPIC_API_KEY != ''
       - uses: actions/upload-artifact@v4
+        if: env.ANTHROPIC_API_KEY != ''
         with:
           name: promptfoo-results
           path: ./promptfoo-results.json
