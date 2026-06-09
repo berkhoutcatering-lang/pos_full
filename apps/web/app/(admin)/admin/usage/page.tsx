@@ -15,8 +15,8 @@ export default async function UsagePage() {
   monthStart.setUTCHours(0, 0, 0, 0)
   const { data: byKind } = await supabase
     .from("ai_usage")
-    .select("kind, model_id, cost_eur, input_tokens, output_tokens, created_at")
-    .eq("org_id", claims.orgId)
+    .select("action_type, model, cost_eur_cents, tokens_input, tokens_output, created_at")
+    .eq("organization_id", claims.orgId)
     .gte("created_at", monthStart.toISOString())
     .order("created_at", { ascending: false })
     .limit(50)
@@ -67,11 +67,11 @@ export default async function UsagePage() {
                   timeZone: "Europe/Amsterdam",
                 })}
               </td>
-              <td>{r.kind}</td>
-              <td className="font-mono text-xs">{r.model_id}</td>
-              <td>{r.input_tokens}</td>
-              <td>{r.output_tokens}</td>
-              <td>€{Number(r.cost_eur).toFixed(4)}</td>
+              <td>{r.action_type}</td>
+              <td className="font-mono text-xs">{r.model}</td>
+              <td>{r.tokens_input}</td>
+              <td>{r.tokens_output}</td>
+              <td>€{(Number(r.cost_eur_cents) / 100).toFixed(4)}</td>
             </tr>
           ))}
         </tbody>

@@ -9,13 +9,15 @@ export default async function StaffPage() {
   const claims = await requireVenue()
   const supabase = await createClient()
   const { data } = await supabase
-    .from("memberships")
-    .select("user_id, role, created_at, manager_pin_hash")
-    .eq("org_id", claims.orgId)
+    .from("organization_members")
+    .select("user_id, pos_role, created_at, manager_pin_hash")
+    .eq("organization_id", claims.orgId)
+    .eq("status", "active")
+    .not("pos_role", "is", null)
     .order("created_at")
   const rows = (data ?? []).map((m) => ({
     user_id: m.user_id as string,
-    role: m.role as string,
+    role: m.pos_role as string,
     created_at: m.created_at as string,
     has_manager_pin: Boolean(m.manager_pin_hash),
   }))

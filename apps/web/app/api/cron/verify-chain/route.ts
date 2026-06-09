@@ -33,9 +33,9 @@ export async function GET(req: NextRequest) {
 
   const supabase = admin()
   const { data: orgs } = await supabase
-    .from("orgs")
+    .from("organizations")
     .select("id, slug")
-    .eq("tier", "pro")
+    .eq("pos_tier", "pro")
 
   const results: Array<{
     org_id: string

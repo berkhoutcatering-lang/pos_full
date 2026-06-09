@@ -66,6 +66,7 @@ export async function closeDayAction(
       order_count: report.order_count,
       btw_breakdown: report.btw_breakdown,
       payment_split: report.payment_split,
+      canonical_json_version: "2026-05-18-a",
     },
   })
 

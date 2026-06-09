@@ -4,9 +4,10 @@ import { logger } from "../utils/logger.js"
 
 // SBA Fase 4 hash-chain writer. Pi calls the `write_audit_log` Postgres
 // function with service-role; the function holds the per-org advisory
-// lock and the foundation `audit_log_hash_before_insert` trigger seals
-// the hash. Pi NEVER inserts into audit_log directly — only via RPC so
-// the lock + chain stay coherent across multiple writers.
+// lock and the `pos_audit_log_hash_before_insert` trigger seals the hash.
+// Pi NEVER inserts into pos_audit_log directly — only via RPC so the lock
+// + chain stay coherent across multiple writers. (On the shared BBQ DB the
+// table is pos_audit_log to avoid colliding with BBQ's own audit_log.)
 
 const supabaseAdmin = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },

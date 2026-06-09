@@ -11,13 +11,16 @@ const REFRESH_MS = 60_000
 
 async function refreshOnce() {
   try {
+    // Read the effective view so the offline cache mirrors effective price +
+    // availability (manager overrides, stock) and inherits name from the linked
+    // gerecht. Maps to the local menu_items columns.
     const { data: items, error } = await supabaseAdmin
-      .from("pos_menu_items")
-      .select("id, venue_id, name, price_cents, btw_class, category, is_active, payload:row_to_json")
+      .from("pos_menu_items_effective")
+      .select("id, venue_id, name, effective_price_cents, btw_class, category, is_available")
       .eq("venue_id", config.VENUE_ID)
-      .eq("is_active", true)
+      .eq("is_available", true)
     if (error) {
-      // Phase 3 hasn't created the table yet — soft skip.
+      // View not present yet — soft skip.
       if (error.code === "42P01") return
       throw error
     }
@@ -33,11 +36,11 @@ async function refreshOnce() {
             it.id,
             it.venue_id,
             it.name,
-            it.price_cents,
+            it.effective_price_cents,
             it.btw_class,
             it.category ?? null,
-            it.is_active,
-            it.payload ?? it,
+            it.is_available,
+            it,
           ],
         )
       }

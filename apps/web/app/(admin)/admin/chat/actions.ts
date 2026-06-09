@@ -68,7 +68,7 @@ export async function adminChatAction(messages: ChatMessage[]): Promise<Result> 
   )
   const [{ data: org }, { data: venue }] = await Promise.all([
     sbAdmin
-      .from("orgs")
+      .from("organizations")
       .select("name, kvk_number, btw_number")
       .eq("id", claims.orgId)
       .maybeSingle(),

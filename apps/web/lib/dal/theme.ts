@@ -25,9 +25,10 @@ export async function getActiveTheme(): Promise<{ preset: Preset }> {
     if (!user) return { preset: DEFAULT_PRESET }
 
     const { data: membership } = await supabase
-      .from("memberships")
-      .select("org_id")
+      .from("organization_members")
+      .select("organization_id")
       .eq("user_id", user.id)
+      .eq("status", "active")
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle()
@@ -36,7 +37,7 @@ export async function getActiveTheme(): Promise<{ preset: Preset }> {
     const { data: settings } = await supabase
       .from("org_theme_settings")
       .select("preset")
-      .eq("org_id", membership.org_id)
+      .eq("org_id", membership.organization_id)
       .maybeSingle()
     const preset = settings?.preset as string | undefined
     if (preset && (PRESETS as readonly string[]).includes(preset)) {

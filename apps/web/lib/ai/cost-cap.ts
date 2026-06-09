@@ -60,24 +60,25 @@ export interface CapStatus {
 export async function checkCostCap(orgId: string): Promise<CapStatus> {
   const supabase = admin()
   const { data: org } = await supabase
-    .from("orgs")
-    .select("tier")
+    .from("organizations")
+    .select("pos_tier")
     .eq("id", orgId)
     .maybeSingle()
-  const tier = (org?.tier as string) ?? "free"
+  const tier = (org?.pos_tier as string) ?? "free"
   const cap_eur = TIER_CAPS_EUR[tier] ?? 0
 
   const monthStart = new Date()
   monthStart.setUTCDate(1)
   monthStart.setUTCHours(0, 0, 0, 0)
 
+  // Shared ai_usage stores cost in integer cents (cost_eur_cents).
   const { data } = await supabase
     .from("ai_usage")
-    .select("cost_eur")
-    .eq("org_id", orgId)
+    .select("cost_eur_cents")
+    .eq("organization_id", orgId)
     .gte("created_at", monthStart.toISOString())
   const used_eur = (data ?? []).reduce(
-    (s, row) => s + Number(row.cost_eur ?? 0),
+    (s, row) => s + Number(row.cost_eur_cents ?? 0) / 100,
     0,
   )
   const pct = cap_eur > 0 ? used_eur / cap_eur : Number.POSITIVE_INFINITY
@@ -105,9 +106,18 @@ export async function recordUsage(args: {
   latency_ms?: number | null
 }) {
   const supabase = admin()
+  // Map POS semantics -> shared ai_usage column names.
   await supabase.from("ai_usage").insert({
-    ...args,
+    organization_id: args.org_id,
+    venue_id: args.venue_id,
+    user_id: args.user_id,
+    action_type: args.kind,
+    model: args.model_id,
     prompt_version: args.prompt_version ?? null,
+    tokens_input: args.input_tokens,
+    tokens_output: args.output_tokens,
+    tokens_cache_read: args.cache_read_tokens,
+    cost_eur_cents: Math.round(args.cost_eur * 100),
     latency_ms: args.latency_ms ?? null,
   })
 }
@@ -129,22 +139,22 @@ export async function preDebitUsage(args: {
   const { data, error } = await supabase
     .from("ai_usage")
     .insert({
-      org_id: args.org_id,
+      organization_id: args.org_id,
       venue_id: args.venue_id,
       user_id: args.user_id,
-      kind: args.kind,
-      model_id: args.model_id,
+      action_type: args.kind,
+      model: args.model_id,
       prompt_version: args.prompt_version ?? null,
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_read_tokens: 0,
-      cost_eur: args.estimated_cost_eur,
+      tokens_input: 0,
+      tokens_output: 0,
+      tokens_cache_read: 0,
+      cost_eur_cents: Math.round(args.estimated_cost_eur * 100),
       latency_ms: null,
     })
     .select("id")
     .single()
   if (error || !data) throw new Error(`preDebitUsage failed: ${error?.message}`)
-  return { usage_id: data.id as string }
+  return { usage_id: String(data.id) }
 }
 
 export async function finaliseUsage(args: {
@@ -159,10 +169,10 @@ export async function finaliseUsage(args: {
   await supabase
     .from("ai_usage")
     .update({
-      input_tokens: args.input_tokens,
-      output_tokens: args.output_tokens,
-      cache_read_tokens: args.cache_read_tokens,
-      cost_eur: args.cost_eur,
+      tokens_input: args.input_tokens,
+      tokens_output: args.output_tokens,
+      tokens_cache_read: args.cache_read_tokens,
+      cost_eur_cents: Math.round(args.cost_eur * 100),
       latency_ms: args.latency_ms,
     })
     .eq("id", args.usage_id)

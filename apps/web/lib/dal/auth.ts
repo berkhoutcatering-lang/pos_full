@@ -27,11 +27,15 @@ export async function getClaims(): Promise<Claims | null> {
   const cookieStore = await cookies()
   const rawVenueId = cookieStore.get("hb_venue")?.value ?? null
 
-  // Primary membership for now (multi-org UI lands in Phase 6 admin).
+  // Shared-DB tenant model: organization_members with a POS-specific pos_role.
+  // Only active members WITH a pos_role have POS access (BBQ-only members are
+  // filtered out). Primary membership for now (multi-org UI lands later).
   const { data: membership } = await supabase
-    .from("memberships")
-    .select("org_id, role")
+    .from("organization_members")
+    .select("organization_id, pos_role")
     .eq("user_id", user.id)
+    .eq("status", "active")
+    .not("pos_role", "is", null)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -47,7 +51,7 @@ export async function getClaims(): Promise<Claims | null> {
       .from("venues")
       .select("id")
       .eq("id", rawVenueId)
-      .eq("org_id", membership.org_id)
+      .eq("org_id", membership.organization_id)
       .eq("active", true)
       .maybeSingle()
     if (venueRow?.id) {
@@ -66,9 +70,9 @@ export async function getClaims(): Promise<Claims | null> {
 
   return {
     userId: user.id,
-    orgId: membership.org_id as string,
+    orgId: membership.organization_id as string,
     venueId,
-    role: membership.role as Role,
+    role: membership.pos_role as Role,
   }
 }
 

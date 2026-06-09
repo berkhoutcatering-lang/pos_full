@@ -9,7 +9,7 @@ export default async function AuditPage() {
   const claims = await requireVenue()
   const supabase = await createClient()
   const { data } = await supabase
-    .from("audit_log")
+    .from("pos_audit_log")
     .select(
       "seq_id, event_type, actor_user_id, actor_terminal_id, hash_curr, created_at",
     )

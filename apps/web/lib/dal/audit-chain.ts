@@ -50,7 +50,7 @@ export async function verifyHashChain(args: {
 }): Promise<ChainVerifyResult> {
   const supabase = await createClient()
   let q = supabase
-    .from("audit_log")
+    .from("pos_audit_log")
     .select("seq_id, payload_canonical, hash_prev, hash_curr")
     .eq("org_id", args.orgId)
     .order("seq_id", { ascending: true })

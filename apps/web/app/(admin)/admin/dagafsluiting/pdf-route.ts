@@ -27,10 +27,10 @@ export async function downloadZRapportAction(raw: unknown) {
 
   const supabase = await createClient()
   const [{ data: org }, { data: venue }, { data: anchor }] = await Promise.all([
-    supabase.from("orgs").select("name, kvk_number, btw_number").eq("id", claims.orgId).maybeSingle(),
+    supabase.from("organizations").select("name, kvk_number, btw_number").eq("id", claims.orgId).maybeSingle(),
     supabase.from("venues").select("name").eq("id", claims.venueId).maybeSingle(),
     supabase
-      .from("audit_log")
+      .from("pos_audit_log")
       .select("seq_id, hash_curr")
       .eq("org_id", claims.orgId)
       .order("seq_id", { ascending: false })

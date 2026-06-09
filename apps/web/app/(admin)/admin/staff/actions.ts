@@ -24,7 +24,7 @@ export async function setManagerPinAction(raw: unknown): Promise<Result> {
   const parsed = Schema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: "validation" }
 
-  // Argon2id matches the format check on memberships.manager_pin_hash
+  // Argon2id matches the format check on organization_members.manager_pin_hash
   // (`like '$argon2id$%'`).
   const hash = await argonHash(parsed.data.pin, {
     algorithm: 2, // 2 = argon2id in @node-rs/argon2
@@ -35,11 +35,11 @@ export async function setManagerPinAction(raw: unknown): Promise<Result> {
 
   const supabase = admin()
   const { error } = await supabase
-    .from("memberships")
+    .from("organization_members")
     .update({ manager_pin_hash: hash })
     .eq("user_id", parsed.data.target_user_id)
-    .eq("org_id", claims.orgId)
-    .in("role", ["manager", "owner"])
+    .eq("organization_id", claims.orgId)
+    .in("pos_role", ["manager", "owner"])
   if (error) return { ok: false, error: "update_failed" }
 
   await supabase.rpc("write_audit_log", {
@@ -51,6 +51,7 @@ export async function setManagerPinAction(raw: unknown): Promise<Result> {
     p_payload: {
       action: "set_manager_pin",
       target_user_id: parsed.data.target_user_id,
+      canonical_json_version: "2026-05-18-a",
     },
   })
   return { ok: true }
