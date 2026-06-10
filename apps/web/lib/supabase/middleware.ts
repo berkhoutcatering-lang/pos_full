@@ -8,7 +8,9 @@ import {
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions }
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/preview"]
+// /pair is publiek: een verse tablet wordt eerst gekoppeld en logt daarna
+// pas in — de pairing-code zelf is de beveiliging.
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/preview", "/pair"]
 
 // Re-sign the offline-identity cookie at most once an hour.
 const OFFLINE_COOKIE_REFRESH_MS = 60 * 60 * 1000
