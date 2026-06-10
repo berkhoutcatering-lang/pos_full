@@ -31,7 +31,8 @@ tijdens de dienst.** Het image bevat:
 | Bestellen, bonnen printen, KDS-flow | ✅ via Pi-bridge outbox; KDS toont ook offline geplaatste orders |
 | Menu (SSR) | ✅ laatste succesvolle snapshot van de Pi |
 | Ingelogd blijven | ✅ offline-identity cookie + lokale claims-cache (30 dagen) |
-| **Opnieuw/voor het eerst inloggen** | ❌ Supabase Auth heeft internet nodig — log de schermen in zolang er internet is |
+| Opnieuw inloggen (zelfde account) | ✅ lokale wachtwoord-verificatie (argon2-cache, 30 dagen) — werkt per account nadat het één keer online op deze Pi inlogde |
+| **Allereerste login van een account** | ❌ Supabase Auth heeft éénmalig internet nodig per account |
 | PIN (myPOS) | ❌ de terminal zelf heeft een verbinding nodig |
 | Supabase-sync, dagafsluiting-data, AI | ⏳ zodra er weer internet is (ethernet/tethering) flusht de outbox |
 
@@ -87,8 +88,10 @@ docker run --rm -v "$PWD/stage-pos/04-pos-system:/work" -v "$PWD/smoke:/smoke" \
    Instellingen → Beveiliging → CA-certificaat installeren).
 5. Verbind de tablets met het AP (`AP_SSID`) en open
    **`https://hopbites.local`** — dat is de kassa/KDS/CFD/admin. Log élk
-   scherm één keer in terwijl er nog internet is (bijv. thuis of via
-   tethering); daarna blijft het 30 dagen offline bruikbaar.
+   account één keer in terwijl er nog internet is (bijv. thuis of via
+   tethering); daarna kan dat account 30 dagen offline in- en uitloggen
+   (de Pi verifieert het wachtwoord dan lokaal; wachtwoord-wijzigingen in
+   Supabase bereiken de Pi pas bij de volgende online login).
    (Android zonder mDNS: `https://pos.lan` of `https://10.42.0.1` werkt ook.)
 6. Pair de tablets met de Pi-bridge via admin → Devices.
 

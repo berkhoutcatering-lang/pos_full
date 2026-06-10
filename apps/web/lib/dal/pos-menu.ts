@@ -26,7 +26,9 @@ export async function readMenu(orgId: string, venueId: string): Promise<MenuSnap
     if (!isNetworkError(err)) throw err
     const cached = await offlineCacheRead<MenuSnapshot>(cacheKey)
     if (cached) return cached
-    throw err
+    // Never synced + offline: render an empty kassa rather than a crash —
+    // the operator sees immediately that the Pi needs one online sync.
+    return { items: [], modifier_groups: [], combos: [], staffels: [] }
   }
   void offlineCacheWrite(cacheKey, snapshot)
   return snapshot

@@ -1,5 +1,5 @@
 import "server-only"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { isNetworkError, offlineCacheRead, offlineCacheWrite } from "@/lib/offline/cache"
@@ -37,6 +37,14 @@ async function getOfflineClaims(): Promise<Claims | null> {
 }
 
 export async function getClaims(): Promise<Claims | null> {
+  // Middleware already determined Supabase is unreachable for this
+  // request (and verified the offline cookie there); don't re-attempt
+  // network auth, serve the cached claims straight away. The header is
+  // middleware-internal: incoming requests get it stripped, and
+  // getOfflineClaims re-verifies the signed cookie anyway.
+  const headerStore = await headers()
+  if (headerStore.get("x-hb-offline") === "1") return getOfflineClaims()
+
   const supabase = await createClient()
   let user: { id: string } | null = null
   try {

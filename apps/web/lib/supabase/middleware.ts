@@ -13,6 +13,11 @@ const PUBLIC_PATHS = ["/login", "/auth/callback", "/preview"]
 // Re-sign the offline-identity cookie at most once an hour.
 const OFFLINE_COOKIE_REFRESH_MS = 60 * 60 * 1000
 
+// Internal header that tells the DAL "Supabase is unreachable, serve the
+// cached claims". Always stripped from incoming requests (spoof-proof:
+// the DAL additionally verifies the signed offline cookie itself).
+const OFFLINE_HEADER = "x-hb-offline"
+
 function isRetryableAuthError(err: unknown): boolean {
   if (!err) return false
   const e = err as { name?: string; message?: string; status?: number }
@@ -23,7 +28,29 @@ function isRetryableAuthError(err: unknown): boolean {
   )
 }
 
+// Cheap "is Supabase reachable" probe, cached briefly. Only consulted in
+// the rare no-Supabase-session + offline-cookie state (offline login on
+// the Pi); any HTTP response counts as reachable.
+let lastProbe: { at: number; reachable: boolean } | null = null
+async function supabaseReachable(): Promise<boolean> {
+  if (lastProbe && Date.now() - lastProbe.at < 30_000) return lastProbe.reachable
+  let reachable = true
+  try {
+    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/health`, {
+      signal: AbortSignal.timeout(1500),
+      cache: "no-store",
+    })
+  } catch {
+    reachable = false
+  }
+  lastProbe = { at: Date.now(), reachable }
+  return reachable
+}
+
 export async function updateSession(request: NextRequest) {
+  // Sanitize: never trust an offline marker coming from the network.
+  request.headers.delete(OFFLINE_HEADER)
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -48,7 +75,7 @@ export async function updateSession(request: NextRequest) {
   // Refresh JWT and read current user. On the Pi deployment Supabase can
   // be unreachable (truck without internet) — that is NOT "logged out":
   // fall back to the signed offline-identity cookie set during the last
-  // successful online check.
+  // successful online check (or by an offline login).
   let user: { id: string } | null = null
   let offline = false
   try {
@@ -79,20 +106,27 @@ export async function updateSession(request: NextRequest) {
         })
       }
     }
-  } else if (offline) {
+  } else {
     const identity = await verifyOfflineIdentity(request.cookies.get(OFFLINE_COOKIE)?.value)
-    if (identity) {
+    if (identity && !offline) {
+      // Valid offline cookie but no Supabase session: either a logout
+      // (Supabase reachable → enforce it) or an offline login on the Pi
+      // (no internet → honor the offline identity).
+      offline = !(await supabaseReachable())
+    }
+    if (identity && offline) {
       // Known device of a previously verified user: let the request
       // through; the DAL serves cached claims/data (see lib/dal/auth.ts).
-      response.headers.set("x-hb-offline", "1")
+      const requestHeaders = new Headers(request.headers)
+      requestHeaders.set(OFFLINE_HEADER, "1")
+      const offlineResponse = NextResponse.next({ request: { headers: requestHeaders } })
       const venueId = request.cookies.get("hb_venue")?.value
-      if (venueId) response.headers.set("x-hb-venue", venueId)
-      return response
+      if (venueId) offlineResponse.headers.set("x-hb-venue", venueId)
+      return offlineResponse
     }
-  } else {
-    // Definitive "no session" (not a network failure): drop any stale
-    // offline identity so a logout sticks.
-    if (request.cookies.get(OFFLINE_COOKIE)) {
+    if (!offline && request.cookies.get(OFFLINE_COOKIE)) {
+      // Definitive "no session" while Supabase is reachable: drop the
+      // stale offline identity so a logout sticks.
       response.cookies.delete(OFFLINE_COOKIE)
     }
   }
