@@ -4,16 +4,20 @@ import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { createClient } from "@/lib/supabase/server"
 import { ULID_RE } from "@hopbites/shared/ulid"
 
+// "placed" is een geldige TERUG-transitie: de keuken kan een kaart weer
+// terugslepen (bijv. per ongeluk gestart). served blijft alleen vooruit.
 const BumpSchema = z.object({
   order_id: z.string().uuid(),
-  to_status: z.enum(["preparing", "ready", "served"]),
+  to_status: z.enum(["placed", "preparing", "ready", "served"]),
   // Client supplies the idempotency_key so a double-tap collapses to one
   // state transition. Server stores result in pos_idempotency.
   idempotency_key: z.string().regex(ULID_RE),
 })
 
+type BumpStatus = "placed" | "preparing" | "ready" | "served"
+
 type BumpResult =
-  | { ok: true; order_id: string; status: "preparing" | "ready" | "served" }
+  | { ok: true; order_id: string; status: BumpStatus }
   | { ok: false; error: string }
 
 export async function bumpOrderAction(raw: unknown): Promise<BumpResult> {
@@ -36,13 +40,14 @@ export async function bumpOrderAction(raw: unknown): Promise<BumpResult> {
       return {
         ok: true,
         order_id: r.order_id,
-        status: r.status as "preparing" | "ready" | "served",
+        status: r.status as BumpStatus,
       }
     }
   }
 
   const nowIso = new Date().toISOString()
   const updates: Record<string, unknown> = { status: parsed.data.to_status }
+  if (parsed.data.to_status === "placed") updates.prepared_at = null
   if (parsed.data.to_status === "preparing") updates.prepared_at = nowIso
   if (parsed.data.to_status === "served") updates.served_at = nowIso
 

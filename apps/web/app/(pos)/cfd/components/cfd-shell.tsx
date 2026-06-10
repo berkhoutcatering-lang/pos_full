@@ -69,6 +69,34 @@ export function CfdShell({
     }
   }
 
+  // LAN-polling elke 4s: realtime loopt via Supabase en valt dus weg
+  // zonder internet — de Pi serveert /api/cfd/orders lokaal, zodat een
+  // keuken-bump binnen seconden op het klantenscherm staat.
+  useEffect(() => {
+    let stopped = false
+    const poll = async () => {
+      const res = await fetch("/api/cfd/orders", {
+        credentials: "include",
+        cache: "no-store",
+      }).catch(() => null)
+      if (stopped || !res?.ok) return
+      const data = (await res.json()) as { orders: CfdOrder[] }
+      setOrders(data.orders)
+      for (const o of data.orders) {
+        if (o.status === "ready" && !seenReady.current.has(o.id)) {
+          seenReady.current.add(o.id)
+          ringBell()
+        }
+      }
+    }
+    const t = setInterval(poll, 4000)
+    return () => {
+      stopped = true
+      clearInterval(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     const channel = subscribeToVenueOrders(orgId, venueId, (e) => {
       if (e.kind !== "order") return

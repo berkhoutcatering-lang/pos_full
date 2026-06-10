@@ -9,11 +9,22 @@ import {
   ChefHat,
   Flame,
   HandPlatter,
+  History,
   Inbox,
   LayoutGrid,
   Play,
+  Settings2,
 } from "lucide-react"
 import { ulid } from "ulid"
+import {
+  DndContext,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
 import { subscribeToVenueOrders } from "@/lib/pos/realtime-subscribe"
 import { updateOrderStateViaPi } from "@/lib/pi-bridge/client"
 import { useConnectionStatus } from "@/lib/pos/connection-status"
@@ -22,8 +33,42 @@ import type { ActiveOrder } from "@/lib/dal/active-orders"
 import { OrderCard } from "./order-card"
 import { StationFilter } from "./station-filter"
 import { ConnectionChip } from "@/components/connection-chip"
+import { HistoryPanel } from "./history-panel"
 
 const STATIONS_DEFAULT = ["alle", "grill"] as const
+
+type LaneStatus = "placed" | "preparing" | "ready"
+type BumpTarget = LaneStatus | "served"
+
+// ---- KDS-voorkeuren (lokaal per scherm) --------------------------------
+
+interface KdsPrefs {
+  cols: Record<LaneStatus, 1 | 2>
+  scale: "s" | "m" | "l"
+}
+
+const DEFAULT_PREFS: KdsPrefs = {
+  cols: { placed: 1, preparing: 1, ready: 1 },
+  scale: "m",
+}
+
+// Kaarten gebruiken vaste Tailwind-groottes; zoom schaalt de hele kaart
+// proportioneel (Chrome/Safari — de kiosk en tablets draaien Chromium).
+const SCALE_ZOOM: Record<KdsPrefs["scale"], number> = { s: 0.85, m: 1, l: 1.18 }
+
+function loadPrefs(): KdsPrefs {
+  try {
+    const raw = window.localStorage.getItem("hb_kds_prefs")
+    if (!raw) return DEFAULT_PREFS
+    const parsed = JSON.parse(raw) as Partial<KdsPrefs>
+    return {
+      cols: { ...DEFAULT_PREFS.cols, ...(parsed.cols ?? {}) },
+      scale: parsed.scale ?? "m",
+    }
+  } catch {
+    return DEFAULT_PREFS
+  }
+}
 
 export function KdsShell({
   initial,
@@ -41,6 +86,22 @@ export function KdsShell({
   const itemsByOrder = useRef(new Map<string, ActiveOrder["items"]>())
   const [soundOn, setSoundOn] = useState(true)
   const seenOrderIds = useRef(new Set<string>(initial.map((o) => o.id)))
+  const [prefs, setPrefs] = useState<KdsPrefs>(DEFAULT_PREFS)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+
+  useEffect(() => {
+    setPrefs(loadPrefs())
+  }, [])
+  const updatePrefs = useCallback((next: KdsPrefs) => {
+    setPrefs(next)
+    try {
+      window.localStorage.setItem("hb_kds_prefs", JSON.stringify(next))
+    } catch {
+      /* private mode */
+    }
+  }, [])
 
   // Persisted sound toggle. New-order chime fires when a card enters
   // the queue for the first time; toggling off keeps the visual flash
@@ -60,9 +121,6 @@ export function KdsShell({
   const ring = useCallback(() => {
     if (!soundOn) return
     if (typeof window === "undefined") return
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      // Reduced-motion users still hear the chime; only the pulse is dropped.
-    }
     try {
       const Ctx =
         (window as unknown as { AudioContext?: typeof AudioContext })
@@ -91,13 +149,6 @@ export function KdsShell({
     }
   }, [soundOn])
 
-  // Tick once per second to refresh age coloring.
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 1000)
-    return () => clearInterval(t)
-  }, [])
-
   // Initial items snapshot
   useEffect(() => {
     for (const o of initial) itemsByOrder.current.set(o.id, o.items)
@@ -111,8 +162,14 @@ export function KdsShell({
     if (!res?.ok) return
     const data = (await res.json()) as { orders: ActiveOrder[] }
     setOrders(data.orders)
-    for (const o of data.orders) itemsByOrder.current.set(o.id, o.items)
-  }, [venueId])
+    for (const o of data.orders) {
+      itemsByOrder.current.set(o.id, o.items)
+      if (!seenOrderIds.current.has(o.id)) {
+        seenOrderIds.current.add(o.id)
+        ring()
+      }
+    }
+  }, [venueId, ring])
 
   useEffect(() => {
     const channel = subscribeToVenueOrders(orgId, venueId, (e) => {
@@ -122,8 +179,6 @@ export function KdsShell({
         if (e.status === "SUBSCRIBED") {
           // catch up missed events
           void refetch()
-        } else if (e.status === "CHANNEL_ERROR" || e.status === "TIMED_OUT") {
-          // realtime auto-retries; refetch on next SUBSCRIBED
         }
         return
       }
@@ -186,24 +241,26 @@ export function KdsShell({
     return () => {
       void channel.unsubscribe()
     }
-  }, [orgId, venueId, refetch])
+  }, [orgId, venueId, refetch, ring, setRealtimeStatus])
 
-  // Belt + braces — REST refetch every 30s in case realtime silently drops.
+  // LAN-polling elke 4s — realtime is de snelle route mét internet, maar
+  // zonder internet is dit dé route (de Pi serveert /api/keuken/orders
+  // lokaal incl. de offline outbox-overlay).
   useEffect(() => {
-    const t = setInterval(refetch, 30_000)
+    const t = setInterval(refetch, 4000)
     return () => clearInterval(t)
   }, [refetch])
 
   // In-flight guard: a second tap on the SAME (order, transition) coalesces
-  // into the original promise so we generate exactly one idempotency_key,
-  // one Pi call, one SA call. Plus a per-transition idempotency key cache:
-  // even AFTER the inflight clears, a re-tap on the same transition reuses
-  // the same key, so a late Pi outbox flush dedups against the original.
+  // into the original promise. The per-transition key cache is SHORT (5s):
+  // lang genoeg om dubbeltikken te collapsen, kort genoeg om heen-en-terug
+  // slepen (placed → preparing → placed → preparing) als losse mutaties te
+  // behandelen i.p.v. ze upstream te dedupen.
   const inflight = useRef(new Map<string, Promise<void>>())
   const transitionKeys = useRef(new Map<string, string>())
 
   const handleBump = useCallback(
-    async (orderId: string, toStatus: "preparing" | "ready" | "served") => {
+    async (orderId: string, toStatus: BumpTarget) => {
       const key = `${orderId}:${toStatus}`
       const existing = inflight.current.get(key)
       if (existing) return existing
@@ -212,20 +269,14 @@ export function KdsShell({
       if (!idempotency_key) {
         idempotency_key = ulid()
         transitionKeys.current.set(key, idempotency_key)
-        // Round 3 P1-3: clear the key after 10 minutes so a long-running
-        // shift doesn't accumulate stale (order, transition) pairs.
-        // Pi-bridge print_log + pos_idempotency both already dedup for
-        // ≥24h, so by 10min any late retry is already a duplicate at the
-        // upstream layer.
         setTimeout(() => {
           transitionKeys.current.delete(key)
-        }, 10 * 60_000)
+        }, 5_000)
       }
 
       const p = (async () => {
         // Bumping to "served" takes the card off the KDS; the other
-        // transitions just recolour it. Filtering also keeps the optimistic
-        // update within ActiveOrder["status"] (which has no "served").
+        // transitions just move it between lanes.
         setOrders((prev) =>
           toStatus === "served"
             ? prev.filter((o) => o.id !== orderId)
@@ -255,6 +306,39 @@ export function KdsShell({
       return p
     },
     [refetch],
+  )
+
+  // Geschiedenis → terug naar Klaar (per ongeluk uitgegeven bon).
+  const handleRestore = useCallback(
+    async (orderId: string) => {
+      setRestoring(true)
+      try {
+        await handleBump(orderId, "ready")
+        await refetch()
+      } finally {
+        setRestoring(false)
+      }
+    },
+    [handleBump, refetch],
+  )
+
+  // Slepen tussen kolommen — beide richtingen. Lang-indrukken (150ms)
+  // start het slepen zodat scrollen en de bump-knop gewoon blijven werken.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 150, tolerance: 8 },
+    }),
+  )
+  const onDragEnd = useCallback(
+    (e: DragEndEvent) => {
+      const orderId = String(e.active.id)
+      const target = e.over?.id as LaneStatus | undefined
+      if (!target) return
+      const current = orders.find((o) => o.id === orderId)?.status
+      if (!current || current === target) return
+      void handleBump(orderId, target)
+    },
+    [orders, handleBump],
   )
 
   const visible = useMemo(() => {
@@ -303,6 +387,12 @@ export function KdsShell({
             {visible.length} open bonnen
           </span>
           <button
+            onClick={() => setHistoryOpen(true)}
+            className="inline-flex h-11 items-center gap-2 rounded-md border border-charcoal-700 bg-transparent px-4 text-[14px] font-bold leading-none text-charcoal-300"
+          >
+            <History size={18} /> Geschiedenis
+          </button>
+          <button
             onClick={() => setSoundOn((v) => !v)}
             className={`inline-flex h-11 items-center gap-2 rounded-md border border-charcoal-700 bg-transparent px-4 text-[14px] font-bold leading-none ${
               soundOn ? "text-hop-500" : "text-charcoal-400"
@@ -311,8 +401,22 @@ export function KdsShell({
             aria-label={soundOn ? "Geluid uitzetten" : "Geluid aanzetten"}
           >
             {soundOn ? <Bell size={18} /> : <BellOff size={18} />}
-            {soundOn ? "Geluid aan" : "Geluid uit"}
           </button>
+          <div className="relative">
+            <button
+              onClick={() => setSettingsOpen((v) => !v)}
+              aria-label="Weergave-instellingen"
+              aria-expanded={settingsOpen}
+              className={`inline-flex h-11 w-11 items-center justify-center rounded-md border border-charcoal-700 ${
+                settingsOpen ? "text-hop-500" : "text-charcoal-300"
+              }`}
+            >
+              <Settings2 size={18} />
+            </button>
+            {settingsOpen ? (
+              <SettingsPopover prefs={prefs} onChange={updatePrefs} />
+            ) : null}
+          </div>
           <ConnectionChip />
         </div>
         <span hidden aria-hidden>
@@ -320,44 +424,135 @@ export function KdsShell({
         </span>
       </div>
 
-      {/* Three status columns */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 md:grid-cols-3">
-        <Column
-          title="Geplaatst"
-          icon={<Inbox size={20} className="text-charcoal-700" />}
-          accent="var(--color-charcoal-500)"
-          orders={columns.placed}
-          onBump={handleBump}
-          nextStatus="preparing"
-          nextLabel="Start bereiding"
-          nextIcon={<Play size={22} />}
-        />
-        <Column
-          title="In bereiding"
-          icon={<Flame size={20} className="text-charcoal-700" />}
-          accent="var(--color-amber-600)"
-          orders={columns.preparing}
-          onBump={handleBump}
-          nextStatus="ready"
-          nextLabel="Klaar"
-          nextIcon={<Check size={22} />}
-        />
-        <Column
-          title="Klaar"
-          icon={<HandPlatter size={20} className="text-charcoal-700" />}
-          accent="var(--color-hop-600)"
-          orders={columns.ready}
-          onBump={handleBump}
-          nextStatus="served"
-          nextLabel="Uitgegeven"
-          nextIcon={<HandPlatter size={22} />}
-        />
-      </div>
+      {/* Three status lanes — kaarten zijn sleepbaar tussen de lanes */}
+      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 md:grid-cols-3">
+          <Column
+            id="placed"
+            title="Geplaatst"
+            icon={<Inbox size={20} className="text-charcoal-700" />}
+            accent="var(--color-charcoal-500)"
+            orders={columns.placed}
+            onBump={handleBump}
+            nextStatus="preparing"
+            nextLabel="Start bereiding"
+            nextIcon={<Play size={22} />}
+            cols={prefs.cols.placed}
+            zoom={SCALE_ZOOM[prefs.scale]}
+          />
+          <Column
+            id="preparing"
+            title="In bereiding"
+            icon={<Flame size={20} className="text-charcoal-700" />}
+            accent="var(--color-amber-600)"
+            orders={columns.preparing}
+            onBump={handleBump}
+            nextStatus="ready"
+            nextLabel="Klaar"
+            nextIcon={<Check size={22} />}
+            cols={prefs.cols.preparing}
+            zoom={SCALE_ZOOM[prefs.scale]}
+          />
+          <Column
+            id="ready"
+            title="Klaar"
+            icon={<HandPlatter size={20} className="text-charcoal-700" />}
+            accent="var(--color-hop-600)"
+            orders={columns.ready}
+            onBump={handleBump}
+            nextStatus="served"
+            nextLabel="Uitgegeven"
+            nextIcon={<HandPlatter size={22} />}
+            cols={prefs.cols.ready}
+            zoom={SCALE_ZOOM[prefs.scale]}
+          />
+        </div>
+      </DndContext>
+
+      <HistoryPanel
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onRestore={handleRestore}
+        restoring={restoring}
+      />
     </div>
   )
 }
 
+// ---- weergave-instellingen ---------------------------------------------
+
+function SettingsPopover({
+  prefs,
+  onChange,
+}: {
+  prefs: KdsPrefs
+  onChange: (p: KdsPrefs) => void
+}) {
+  const laneLabel: Record<LaneStatus, string> = {
+    placed: "Geplaatst",
+    preparing: "In bereiding",
+    ready: "Klaar",
+  }
+  return (
+    <div className="absolute right-0 top-[52px] z-50 w-[290px] rounded-lg border border-line-strong bg-paper-bright p-4 text-charcoal-900 shadow-xl">
+      <div className="mb-3 text-[14px] font-extrabold leading-none">Weergave</div>
+
+      <div className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+        Kaarten per kolom
+      </div>
+      {(Object.keys(laneLabel) as LaneStatus[]).map((lane) => (
+        <div key={lane} className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-[14px] font-semibold">{laneLabel[lane]}</span>
+          <div className="flex gap-1">
+            {([1, 2] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onChange({ ...prefs, cols: { ...prefs.cols, [lane]: n } })}
+                className={`h-9 w-12 rounded-md border text-[13px] font-bold ${
+                  prefs.cols[lane] === n
+                    ? "border-hop-600 bg-hop-600 text-white"
+                    : "border-line-strong bg-paper text-charcoal-700"
+                }`}
+              >
+                {n}×
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="mb-1.5 mt-3 text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+        Lettergrootte
+      </div>
+      <div className="flex gap-1">
+        {(["s", "m", "l"] as const).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onChange({ ...prefs, scale: s })}
+            className={`h-9 flex-1 rounded-md border text-[13px] font-bold uppercase ${
+              prefs.scale === s
+                ? "border-hop-600 bg-hop-600 text-white"
+                : "border-line-strong bg-paper text-charcoal-700"
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-[12px] font-medium leading-[1.4] text-charcoal-500">
+        Tip: houd een kaart even vast om hem naar een andere kolom te slepen —
+        ook terug.
+      </p>
+    </div>
+  )
+}
+
+// ---- lanes + draggable cards --------------------------------------------
+
 function Column({
+  id,
   title,
   icon,
   accent,
@@ -366,18 +561,29 @@ function Column({
   nextStatus,
   nextLabel,
   nextIcon,
+  cols,
+  zoom,
 }: {
+  id: LaneStatus
   title: string
   icon: React.ReactNode
   accent: string
   orders: ActiveOrder[]
-  onBump: (id: string, to: "preparing" | "ready" | "served") => void
-  nextStatus: "preparing" | "ready" | "served"
+  onBump: (id: string, to: BumpTarget) => void
+  nextStatus: BumpTarget
   nextLabel: string
   nextIcon: React.ReactNode
+  cols: 1 | 2
+  zoom: number
 }) {
+  const { isOver, setNodeRef } = useDroppable({ id })
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-paper">
+    <section
+      ref={setNodeRef}
+      className={`flex min-h-0 flex-col overflow-hidden rounded-lg border bg-paper transition-colors ${
+        isOver ? "border-hop-600 bg-hop-600/5" : "border-line"
+      }`}
+    >
       <h2 className="flex flex-none items-center gap-2.5 border-b border-line px-[18px] py-3.5 text-[18px] font-extrabold leading-[1.1] tracking-[0.02em] text-charcoal-900">
         <span
           className="h-3 w-3 flex-none rounded-[3px]"
@@ -389,25 +595,50 @@ function Column({
           {orders.length}
         </span>
       </h2>
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-3.5">
+      <div
+        className={`grid min-h-0 flex-1 content-start gap-3.5 overflow-y-auto p-3.5 ${
+          cols === 2 ? "grid-cols-2" : "grid-cols-1"
+        }`}
+        style={{ zoom }}
+      >
         {orders.length === 0 ? (
-          <div className="m-auto flex flex-col items-center gap-2 text-charcoal-300">
+          <div className="col-span-full m-auto flex flex-col items-center gap-2 py-10 text-charcoal-300">
             <CheckCheck size={40} />
             <span className="text-[15px] font-semibold leading-none">Niets hier</span>
           </div>
         ) : (
           orders.map((o) => (
-            <OrderCard
-              key={o.id}
-              order={o}
-              accent={accent}
-              onBump={() => onBump(o.id, nextStatus)}
-              nextLabel={nextLabel}
-              nextIcon={nextIcon}
-            />
+            <DraggableCard key={o.id} id={o.id}>
+              <OrderCard
+                order={o}
+                accent={accent}
+                onBump={() => onBump(o.id, nextStatus)}
+                nextLabel={nextLabel}
+                nextIcon={nextIcon}
+              />
+            </DraggableCard>
           ))
         )}
       </div>
     </section>
+  )
+}
+
+function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={isDragging ? "relative z-40 cursor-grabbing opacity-90" : "touch-manipulation"}
+      style={
+        transform
+          ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
+          : undefined
+      }
+    >
+      {children}
+    </div>
   )
 }

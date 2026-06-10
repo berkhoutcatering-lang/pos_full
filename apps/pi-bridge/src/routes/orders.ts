@@ -39,7 +39,8 @@ const PlaceOrderSchema = z.object({
 const UpdateStateSchema = z.object({
   idempotency_key: z.string().regex(ULID_RE),
   order_id: z.string().uuid(),
-  state: z.enum(["preparing", "ready", "served", "voided"]),
+  // "placed" = terug-transitie (kaart teruggesleept op de KDS).
+  state: z.enum(["placed", "preparing", "ready", "served", "voided"]),
 })
 
 export async function orderRoutes(app: FastifyInstance) {

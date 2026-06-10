@@ -63,7 +63,7 @@ export function placeOrderViaPi(payload: PlaceOrderPayload) {
 export function updateOrderStateViaPi(payload: {
   idempotency_key: string
   order_id: string
-  state: "preparing" | "ready" | "served" | "voided"
+  state: "placed" | "preparing" | "ready" | "served" | "voided"
 }) {
   return call<{ ok: boolean; queued: boolean }>("/orders/update-state", {
     method: "POST",

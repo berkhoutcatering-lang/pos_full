@@ -63,6 +63,55 @@ async function listActiveOrdersOnline(args: {
   return (data ?? []) as unknown as ActiveOrder[]
 }
 
+// ---- geschiedenis (KDS) ----------------------------------------------
+
+export interface HistoryOrder {
+  id: string
+  ordered_label: string | null
+  customer_name: string | null
+  status: "served" | "voided"
+  placed_at: string
+  served_at: string | null
+  total_incl_cents: number
+  items: Array<{ id: string; name: string; qty: number }>
+}
+
+// Vandaag uitgegeven/geannuleerde bonnen, nieuwste eerst. Offline: de
+// laatste succesvolle snapshot (een uitgifte die offline gebeurde staat
+// nog in de Pi-outbox en verschijnt hier pas na sync — de actieve lijst
+// is dan al wel correct).
+export async function listOrderHistory(args: {
+  orgId: string
+  venueId: string
+}): Promise<HistoryOrder[]> {
+  const cacheKey = `order-history-${args.orgId}-${args.venueId}`
+  const startOfDay = new Date()
+  startOfDay.setHours(0, 0, 0, 0)
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("pos_orders")
+    .select(
+      `id, ordered_label, customer_name, status, placed_at, served_at, total_incl_cents,
+       items:pos_order_items (id, name, qty)`,
+    )
+    .eq("org_id", args.orgId)
+    .eq("venue_id", args.venueId)
+    .in("status", ["served", "voided"])
+    .gte("placed_at", startOfDay.toISOString())
+    .order("placed_at", { ascending: false })
+    .limit(100)
+  if (error) {
+    if (isNetworkError(error)) {
+      return (await offlineCacheRead<HistoryOrder[]>(cacheKey)) ?? []
+    }
+    throw error
+  }
+  const orders = (data ?? []) as unknown as HistoryOrder[]
+  void offlineCacheWrite(cacheKey, orders)
+  return orders
+}
+
 // ---- offline overlay -------------------------------------------------
 
 interface PendingOrderPayload {
@@ -81,7 +130,7 @@ interface PendingOrderPayload {
 
 interface PendingStatePayload {
   order_id: string
-  state: "preparing" | "ready" | "served" | "voided"
+  state: "placed" | "preparing" | "ready" | "served" | "voided"
 }
 
 async function overlayPendingOutbox(
