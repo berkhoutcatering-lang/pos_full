@@ -26,6 +26,9 @@ nieuwer** (oudere images syncen geen orders naar de cloud — niet gebruiken).
       `https://hopbites.local/pair` op de tablet.
 - [ ] Open op elke tablet één keer het scherm dat hij gaat tonen (/pos, /keuken,
       /cfd) zodat menu- en claims-caches gevuld zijn.
+- [ ] Sunmi T3 (of ander dual-screen apparaat): open op het klantgerichte
+      scherm een tweede browservenster met `https://hopbites.local/klant` —
+      dat kijkt live mee met de bon en toont na betaling het afroepnummer.
 - [ ] Testbestelling: plaats → keuken → klaar → uitgegeven. Check dat hij op
       het CFD verscheen en (met internet) in Supabase landt.
 - [ ] Testprint keukenbon + kassabon; test de lade ("Lade"-knop).

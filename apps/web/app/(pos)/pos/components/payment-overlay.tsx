@@ -72,7 +72,7 @@ export function PaymentOverlay({
   claims: { orgId: string; venueId: string; role: string }
   attempt: AttemptKeys
   onClose: () => void
-  onComplete: () => void
+  onComplete: (queueLabel: string | null) => void
 }) {
   const [step, setStep] = useState<Step>(initialMethod ?? "choose")
   const [paidMethod, setPaidMethod] = useState<CheckoutMethod | null>(null)
@@ -349,7 +349,7 @@ export function PaymentOverlay({
               variant="primary"
               size="lg"
               fullWidth
-              onClick={onComplete}
+              onClick={() => onComplete(queueLabel)}
               className="mt-3"
             >
               Nieuwe bon

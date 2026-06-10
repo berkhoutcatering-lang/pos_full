@@ -4,6 +4,7 @@ import { ulid } from "ulid"
 import { Check } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { openDrawerViaPi } from "@/lib/pi-bridge/client"
+import { publishDisplayState } from "@/lib/pos/customer-display"
 import { cartReducer, initialCart, type CartState } from "@/lib/pos/cart-reducer"
 import { priceCart } from "@/lib/pos/pricing"
 import type { MenuItem, MenuSnapshot, ModifierGroup } from "@/lib/pos/types"
@@ -226,12 +227,44 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
     flash("Bon uit de wacht gehaald")
   }
 
-  const onPaid = () => {
+  const onPaid = (queueLabel: string | null) => {
+    paidHoldRef.current = Date.now() + 8000
+    publishDisplayState({
+      kind: "paid",
+      queue_label: queueLabel,
+      total_cents: priced.total_incl_cents,
+    })
     attemptRef.current = freshAttempt()
     setPayMethod(null)
     resetBon()
-    flash("Bon afgerond · naar keuken")
+    flash(queueLabel ? `Bestelling ${queueLabel} · naar keuken` : "Bon afgerond · naar keuken")
   }
+
+  // Klantdisplay (bv. tweede Sunmi-scherm op /klant) kijkt live mee met de
+  // bon. Licht gedebounced; "paid" wordt apart gepubliceerd in onPaid en
+  // mag niet direct door de bon-reset overschreven worden.
+  const paidHoldRef = useRef(0)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (Date.now() < paidHoldRef.current) return
+      if (priced.items.length === 0) {
+        publishDisplayState({ kind: "idle" })
+      } else {
+        publishDisplayState({
+          kind: "cart",
+          lines: priced.items.map((it) => ({
+            name: it.menu_item.name,
+            qty: it.qty,
+            total_cents: it.line_incl_cents,
+          })),
+          discount_cents: priced.discount_cents,
+          total_cents: priced.total_incl_cents,
+          customer_name: cart.customer_name ?? null,
+        })
+      }
+    }, 150)
+    return () => clearTimeout(t)
+  }, [priced, cart.customer_name])
 
   return (
     <div className="relative flex h-dvh flex-col bg-offwhite">
