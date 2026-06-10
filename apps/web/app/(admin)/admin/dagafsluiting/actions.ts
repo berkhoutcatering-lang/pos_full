@@ -73,7 +73,7 @@ export async function closeDayAction(
   // Fire-and-forget Z-rapport print via Pi-bridge customer printer.
   // Phase 2 Pi-bridge currently exposes /print/receipt; the Z-rapport is
   // a customer-bon-shaped print with the day header.
-  void fetch(`https://hopbites.local:3001/print/receipt`, {
+  void fetch(`${process.env.PI_BRIDGE_URL ?? "https://hopbites.local:3001"}/print/receipt`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

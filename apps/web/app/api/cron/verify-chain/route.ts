@@ -3,11 +3,9 @@ import { createClient as createSbAdmin } from "@supabase/supabase-js"
 import { verifyHashChain } from "@/lib/dal/audit-chain"
 
 // Pillar 2 production monitor — dagelijkse hash chain walk for every
-// active org. Vercel Cron pings this at 04:00 Europe/Amsterdam. Any
+// active org. On the Pi the pos-chain-verify.timer systemd unit pings
+// this at 04:00 with `Authorization: Bearer $CRON_SECRET`. Any
 // broken_at result fires a Sentry alert via the `level: "fatal"` capture.
-//
-// vercel.json should include:
-//   { "crons": [{ "path": "/api/cron/verify-chain", "schedule": "0 2 * * *" }] }
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -21,8 +19,8 @@ function admin() {
 }
 
 export async function GET(req: NextRequest) {
-  // Vercel Cron sends a custom Authorization header; without CRON_SECRET
-  // configured we accept any request with the standard cron user-agent.
+  // The systemd timer sends Authorization: Bearer $CRON_SECRET; without
+  // CRON_SECRET configured (dev) any request is accepted.
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret) {
     const auth = req.headers.get("authorization")

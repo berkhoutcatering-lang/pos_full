@@ -1,6 +1,8 @@
 import withPWAInit from "@ducanh2912/next-pwa"
 import { withSentryConfig } from "@sentry/nextjs"
 import type { NextConfig } from "next"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -14,7 +16,7 @@ const withPWA = withPWAInit({
   workboxOptions: {
     runtimeCaching: [
       {
-        urlPattern: /^http:\/\/hopbites\.local:3001\/cache\//,
+        urlPattern: /^https:\/\/hopbites\.local:3001\/cache\//,
         handler: "NetworkFirst",
         options: { cacheName: "pi-cache", networkTimeoutSeconds: 1 },
       },
@@ -43,6 +45,12 @@ const CSP_DIRECTIVES = [
   "upgrade-insecure-requests",
 ].join("; ")
 
+// POS_PI_BUILD=1 builds the self-contained bundle that runs on the
+// Raspberry Pi (raspberry-pos-os image): standalone output served by a
+// local node process behind nginx, no Vercel. Image optimization is off
+// there (no sharp on the appliance; menu images are remote anyway).
+const isPiBuild = process.env.POS_PI_BUILD === "1"
+
 const nextConfig: NextConfig = {
   // NOTE: cacheComponents is intentionally OFF. The app renders every
   // route dynamically (force-dynamic everywhere) because it reads
@@ -51,9 +59,22 @@ const nextConfig: NextConfig = {
   // and risks caching one tenant's data for another. Revisit only with a
   // deliberate, per-tenant-keyed caching design.
   typedRoutes: true,
+  // Pin the tracing root to the monorepo root so the standalone bundle
+  // always lands at .next/standalone/apps/web/server.js — the pi-gen
+  // stage and pos-web.service depend on that exact layout.
+  ...(isPiBuild
+    ? {
+        output: "standalone" as const,
+        outputFileTracingRoot: path.resolve(
+          path.dirname(fileURLToPath(import.meta.url)),
+          "../..",
+        ),
+      }
+    : {}),
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }],
+    ...(isPiBuild ? { unoptimized: true } : {}),
   },
   async headers() {
     return [

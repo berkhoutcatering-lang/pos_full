@@ -1,0 +1,10 @@
+[Unit]
+Description=Dagelijkse SBA hash-chain verificatie om 04:00
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=15m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

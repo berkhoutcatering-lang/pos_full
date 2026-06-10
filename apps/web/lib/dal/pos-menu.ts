@@ -1,5 +1,6 @@
 import "server-only"
 import { createClient } from "@/lib/supabase/server"
+import { isNetworkError, offlineCacheRead, offlineCacheWrite } from "@/lib/offline/cache"
 import type {
   ComboDef,
   MenuItem,
@@ -14,6 +15,24 @@ import type {
 // org; the explicit .eq("venue_id", ...) keeps the venue axis tight too.
 
 export async function readMenu(orgId: string, venueId: string): Promise<MenuSnapshot> {
+  // Offline (Pi without internet): serve the last menu that was read
+  // successfully. The Pi-bridge PGlite cache shadows live availability for
+  // the client; this keeps the SSR shell itself rendering.
+  const cacheKey = `menu-${orgId}-${venueId}`
+  let snapshot: MenuSnapshot
+  try {
+    snapshot = await readMenuOnline(orgId, venueId)
+  } catch (err) {
+    if (!isNetworkError(err)) throw err
+    const cached = await offlineCacheRead<MenuSnapshot>(cacheKey)
+    if (cached) return cached
+    throw err
+  }
+  void offlineCacheWrite(cacheKey, snapshot)
+  return snapshot
+}
+
+async function readMenuOnline(orgId: string, venueId: string): Promise<MenuSnapshot> {
   const supabase = await createClient()
 
   const [itemsRes, modsRes, combosRes, staffelsRes] = await Promise.all([
@@ -52,6 +71,12 @@ export async function readMenu(orgId: string, venueId: string): Promise<MenuSnap
       .eq("venue_id", venueId)
       .eq("is_active", true),
   ])
+
+  // PostgREST returns network failures as { error }, not a rejection —
+  // surface them so readMenu can fall back to the offline cache.
+  const firstError =
+    itemsRes.error ?? modsRes.error ?? combosRes.error ?? staffelsRes.error
+  if (firstError && isNetworkError(firstError)) throw firstError
 
   const items: MenuItem[] = (itemsRes.data ?? []).map((r) => ({
     id: r.id as string,

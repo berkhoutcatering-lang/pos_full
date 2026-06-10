@@ -12,3 +12,6 @@ cage
 xwayland
 chromium-browser
 rpi-connect-lite
+nginx-light
+dnsmasq-base
+libnss3-tools

@@ -1,0 +1,33 @@
+[Unit]
+Description=Hop & Bites POS web app (Next.js standalone, lokaal — geen Vercel)
+Wants=network-online.target
+After=network-online.target pos-provision.service pi-bridge.service
+ConditionPathExists=!/run/pos/config-invalid
+ConditionPathExists=/opt/pos-web/apps/web/server.js
+
+[Service]
+Type=simple
+User=posweb
+Group=posweb
+EnvironmentFile=/etc/pos-web/env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+Environment=NEXT_TELEMETRY_DISABLED=1
+# Trust the Pi's own CA so server-side calls to https://<host>.local:3001
+# (pi-bridge) verify.
+Environment=NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/hopbites-ca.crt
+WorkingDirectory=/opt/pos-web/apps/web
+ExecStart=/usr/bin/node /opt/pos-web/apps/web/server.js
+Restart=always
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/pos-web
+
+[Install]
+WantedBy=multi-user.target

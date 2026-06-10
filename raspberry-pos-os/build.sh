@@ -31,12 +31,13 @@ case "$(uname -s)" in
 esac
 
 STAGED_SRC="${SCRIPT_DIR}/stage-pos/02-pi-bridge/files/pi-bridge-src"
+STAGED_WEB="${SCRIPT_DIR}/stage-pos/03-pos-web/files/web-src"
 if [ -f "${SCRIPT_DIR}/../apps/pi-bridge/package.json" ]; then
   "${SCRIPT_DIR}/prepare-stage.sh"
-elif [ -f "${STAGED_SRC}/package.json" ]; then
-  echo "Monorepo niet gevonden — gebruik eerder gestagede pi-bridge source."
+elif [ -f "${STAGED_SRC}/package.json" ] && [ -f "${STAGED_WEB}/apps/web/package.json" ]; then
+  echo "Monorepo niet gevonden — gebruik eerder gestagede pi-bridge + web source."
 else
-  echo "Geen pi-bridge source: draai eerst prepare-stage.sh vanuit de repo." >&2
+  echo "Geen (volledige) staged source: draai eerst prepare-stage.sh vanuit de repo." >&2
   exit 1
 fi
 
