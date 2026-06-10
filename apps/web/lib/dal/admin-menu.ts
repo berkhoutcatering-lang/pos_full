@@ -83,3 +83,76 @@ export async function listModifierGroupsAdmin(args: {
   void offlineCacheWrite(cacheKey, groups)
   return groups
 }
+
+export interface AdminCombo {
+  id: string
+  name: string
+  trigger_item_ids: string[]
+  trigger_min_qty: Record<string, number>
+  discount_cents: number
+  active_from: string | null
+  active_to: string | null
+}
+
+export async function listCombosAdmin(args: {
+  orgId: string
+  venueId: string
+}): Promise<AdminCombo[]> {
+  const cacheKey = `admin-combos-${args.orgId}-${args.venueId}`
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("pos_combos")
+    .select("id, name, trigger_item_ids, trigger_min_qty, discount_cents, active_from, active_to")
+    .eq("org_id", args.orgId)
+    .eq("venue_id", args.venueId)
+    .eq("is_active", true)
+    .order("name")
+  if (error) {
+    if (isNetworkError(error)) {
+      return (await offlineCacheRead<AdminCombo[]>(cacheKey)) ?? []
+    }
+    throw error
+  }
+  const combos = ((data ?? []) as AdminCombo[]).map((c) => ({
+    ...c,
+    trigger_item_ids: c.trigger_item_ids ?? [],
+    trigger_min_qty: c.trigger_min_qty ?? {},
+  }))
+  void offlineCacheWrite(cacheKey, combos)
+  return combos
+}
+
+export interface AdminStaffel {
+  id: string
+  name: string
+  applies_to_item_ids: string[]
+  qty_threshold: number
+  discount_per_extra_cents: number
+}
+
+export async function listStaffelsAdmin(args: {
+  orgId: string
+  venueId: string
+}): Promise<AdminStaffel[]> {
+  const cacheKey = `admin-staffels-${args.orgId}-${args.venueId}`
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from("pos_staffels")
+    .select("id, name, applies_to_item_ids, qty_threshold, discount_per_extra_cents")
+    .eq("org_id", args.orgId)
+    .eq("venue_id", args.venueId)
+    .eq("is_active", true)
+    .order("name")
+  if (error) {
+    if (isNetworkError(error)) {
+      return (await offlineCacheRead<AdminStaffel[]>(cacheKey)) ?? []
+    }
+    throw error
+  }
+  const staffels = ((data ?? []) as AdminStaffel[]).map((s) => ({
+    ...s,
+    applies_to_item_ids: s.applies_to_item_ids ?? [],
+  }))
+  void offlineCacheWrite(cacheKey, staffels)
+  return staffels
+}
