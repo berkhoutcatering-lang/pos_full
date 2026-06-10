@@ -34,6 +34,29 @@ export interface AttemptKeys {
 
 type Step = "choose" | "cash" | "pin" | "done"
 
+// De checkout mag NOOIT blijven hangen (Resilience): server actions
+// hebben geen eigen timeout, dus we racen ertegen. Dankzij de stabiele
+// idempotency-keys is een actie die ná de timeout alsnog landt onschadelijk
+// — een retry met dezelfde key dedupt upstream.
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ])
+}
+
+const PAY_ERROR_TEXT: Record<string, string> = {
+  pi_401: "Deze tablet is niet gekoppeld aan de Pi — open /pair en voer een pairing-code in.",
+  pi_403: "Deze tablet is niet gekoppeld aan deze locatie — koppel opnieuw via /pair.",
+  timeout: "Geen verbinding: Pi onbereikbaar én de cloud reageert niet. Check het netwerk en probeer opnieuw — de bon is nog niet geplaatst.",
+  order_insert_failed: "Opslaan in de cloud mislukt — probeer opnieuw.",
+  items_insert_failed: "Opslaan in de cloud mislukt — probeer opnieuw.",
+  btw_rate_mismatch: "BTW-controle faalde — herlaad de kassa.",
+  validation: "Ongeldige bon — herlaad de kassa.",
+  place_failed: "Bestelling plaatsen mislukt — probeer opnieuw.",
+  unexpected: "Er ging iets mis — probeer opnieuw. De bon is niet kwijt.",
+}
+
 export function PaymentOverlay({
   initialMethod,
   priced,
@@ -101,7 +124,7 @@ export function PaymentOverlay({
     const piLabel = pi.ok ? (pi.data.queue_label ?? null) : null
     if (piLabel) setQueueLabel(piLabel)
     if (!pi.ok) {
-      const fallback = await placeOrderAction({
+      const fallback = await withTimeout(placeOrderAction({
         idempotency_key,
         order_id,
         customer_name: cart.customer_name ?? null,
@@ -128,8 +151,13 @@ export function PaymentOverlay({
           modifiers_json: it.selected_modifiers,
           notes: it.note ?? null,
         })),
-      })
-      if (!fallback.ok) return { ok: false, error: fallback.error ?? "place_failed" }
+      }), 8000, { ok: false as const, error: "timeout" })
+      if (!fallback.ok) {
+        // Geef de Pi-foutcode voorrang als die specifieker is (bv. niet
+        // gepaird) — dat is wat de bediende moet oplossen.
+        const piError = pi.error === "pi_401" || pi.error === "pi_403" ? pi.error : null
+        return { ok: false, error: piError ?? fallback.error ?? "place_failed" }
+      }
     }
 
     const order_label = piLabel ?? cart.customer_name ?? "#"
@@ -174,10 +202,16 @@ export function PaymentOverlay({
     if (busy) return // synchronous guard against double-tap
     setBusy(true)
     setError(null)
-    const res = await placeOrder(method)
-    setBusy(false)
+    let res: { ok: true } | { ok: false; error: string }
+    try {
+      res = await placeOrder(method)
+    } catch {
+      res = { ok: false, error: "unexpected" }
+    } finally {
+      setBusy(false)
+    }
     if (!res.ok) {
-      setError(res.error)
+      setError(PAY_ERROR_TEXT[res.error] ?? res.error)
       return
     }
     // Contant betaald → lade automatisch open (fire-and-forget; zonder
