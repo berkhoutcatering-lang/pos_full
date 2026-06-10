@@ -3,29 +3,29 @@ import { cn } from "@/lib/cn"
 
 /** Station chips for the charcoal KDS header. */
 export function StationFilter({
-  stations,
+  options,
   active,
   onChange,
 }: {
-  stations: string[]
+  options: Array<{ value: string; label: string }>
   active: string
   onChange: (s: string) => void
 }) {
-  if (stations.length <= 1) return null
+  if (options.length <= 1) return null
   return (
     <div className="flex gap-2">
-      {stations.map((s) => (
+      {options.map((o) => (
         <button
-          key={s}
-          onClick={() => onChange(s)}
+          key={o.value}
+          onClick={() => onChange(o.value)}
           className={cn(
-            "h-11 rounded-md border px-5 text-[15px] font-bold capitalize leading-none transition-[background,color,border-color] duration-[var(--dur-fast)]",
-            s === active
+            "h-11 rounded-md border px-5 text-[15px] font-bold leading-none transition-[background,color,border-color] duration-[var(--dur-fast)]",
+            o.value === active
               ? "border-hop-500 bg-hop-600 text-white"
               : "border-charcoal-700 bg-transparent text-charcoal-300 hover:text-offwhite"
           )}
         >
-          {s}
+          {o.label}
         </button>
       ))}
     </div>

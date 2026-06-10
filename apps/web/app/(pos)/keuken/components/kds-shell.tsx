@@ -35,7 +35,16 @@ import { StationFilter } from "./station-filter"
 import { ConnectionChip } from "@/components/connection-chip"
 import { HistoryPanel } from "./history-panel"
 
-const STATIONS_DEFAULT = ["alle", "grill"] as const
+// NL-labels per station (menu-editor kent grill/fryer/cold/bar); het
+// filter toont alleen stations die nu echt in de open bonnen voorkomen.
+const STATION_LABELS: Record<string, string> = {
+  alle: "Alle",
+  grill: "Grill",
+  fryer: "Frituur",
+  cold: "Koud",
+  bar: "Bar",
+}
+const STATION_ORDER = ["grill", "fryer", "cold", "bar"]
 
 type LaneStatus = "placed" | "preparing" | "ready"
 type BumpTarget = LaneStatus | "served"
@@ -341,6 +350,26 @@ export function KdsShell({
     [orders, handleBump],
   )
 
+  // Stations afleiden uit de werkelijke bonnen i.p.v. een hardcoded lijst.
+  const stationOptions = useMemo(() => {
+    const present = new Set<string>()
+    for (const o of orders) for (const it of o.items) if (it.station) present.add(it.station)
+    const sorted = [...present].sort((a, b) => {
+      const ia = STATION_ORDER.indexOf(a)
+      const ib = STATION_ORDER.indexOf(b)
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b)
+    })
+    if (sorted.length <= 1) return []
+    return ["alle", ...sorted].map((v) => ({ value: v, label: STATION_LABELS[v] ?? v }))
+  }, [orders])
+
+  // Actief station verdwenen (laatste bon weggebumpt)? Terug naar Alle.
+  useEffect(() => {
+    if (station !== "alle" && !stationOptions.some((o) => o.value === station)) {
+      setStation("alle")
+    }
+  }, [stationOptions, station])
+
   const visible = useMemo(() => {
     if (station === "alle") return orders
     return orders
@@ -377,7 +406,7 @@ export function KdsShell({
         </div>
         <div className="ml-3">
           <StationFilter
-            stations={[...STATIONS_DEFAULT]}
+            options={stationOptions}
             active={station}
             onChange={setStation}
           />
