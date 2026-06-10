@@ -253,7 +253,6 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
             onAfrekenen={() => {
               if (!empty) setPayMethod("choose")
             }}
-            onOpRekening={() => flash("Op rekening — binnenkort beschikbaar")}
           />
         </div>
       </div>

@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
 import { config } from "../config.js"
 import { logger } from "../utils/logger.js"
+import { enqueueOutbox } from "../db/outbox.js"
+import { newId } from "../utils/ulid.js"
 
 // SBA Fase 4 hash-chain writer. Pi calls the `write_audit_log` Postgres
 // function with service-role; the function holds the per-org advisory
@@ -47,17 +49,33 @@ export async function writeAuditEvent(args: {
     ...args.payload,
     canonical_json_version: CANONICAL_JSON_VERSION,
   }
-  const { error } = await supabaseAdmin.rpc("write_audit_log", {
+  const rpcArgs = {
     p_org_id: config.ORG_ID,
     p_venue_id: args.venue_id ?? config.VENUE_ID,
     p_actor_user_id: args.actor_user_id ?? null,
     p_actor_terminal_id: args.actor_terminal_id ?? null,
     p_event_type: args.event_type,
     p_payload: payloadWithVersion,
-  })
+  }
+  const { error } = await supabaseAdmin.rpc("write_audit_log", rpcArgs)
   if (error) {
-    logger.error({ error, event_type: args.event_type }, "audit log write failed")
-    throw error
+    // Truck without internet: an audit event must NEVER fail the order or
+    // the print. Queue it locally; the outbox-flush worker replays it via
+    // the same RPC ('audit_event' is the worker's RPC branch — it never
+    // hits a PostgREST table insert). The hash chain is sealed at insert
+    // time upstream, so flush order is what the chain records.
+    const queued = enqueueOutbox({
+      idempotency_key: newId(),
+      operation: "insert",
+      table_name: "audit_event",
+      payload: { org_id: config.ORG_ID, rpc: rpcArgs },
+      venue_id: rpcArgs.p_venue_id as string,
+    })
+    if (!queued.enqueued) {
+      logger.error({ error, event_type: args.event_type }, "audit write failed AND queue refused")
+      throw error
+    }
+    logger.warn({ event_type: args.event_type }, "audit event queued for replay (Supabase unreachable)")
   }
 }
 

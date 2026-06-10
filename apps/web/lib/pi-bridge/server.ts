@@ -18,6 +18,41 @@ export interface PendingOutboxEntry {
   created_at: number
 }
 
+export interface MenuUpsertViaPi {
+  idempotency_key: string
+  id: string
+  org_id: string
+  venue_id: string
+  name: string
+  category: string
+  base_price_cents: number
+  btw_class: string
+  station: string
+  is_discountable: boolean
+  is_active: boolean
+}
+
+// Offline menu write: PGlite cache + outbox on the Pi-bridge; synct
+// automatisch naar pos_menu_items zodra Supabase weer bereikbaar is.
+export async function queueMenuUpsertViaPi(
+  payload: MenuUpsertViaPi,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!ENABLED || !ADMIN_TOKEN) return { ok: false, error: "pi_disabled" }
+  try {
+    const res = await fetch(`${PI_BASE}/admin/menu/upsert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-token": ADMIN_TOKEN },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(3000),
+      cache: "no-store",
+    })
+    if (!res.ok) return { ok: false, error: `pi_${res.status}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: "pi_unreachable" }
+  }
+}
+
 export async function fetchPendingOutbox(): Promise<PendingOutboxEntry[] | null> {
   if (!ENABLED || !ADMIN_TOKEN) return null
   try {

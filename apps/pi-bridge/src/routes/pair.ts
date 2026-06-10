@@ -3,6 +3,7 @@ import { z } from "zod"
 import { issuePairCode, redeemPairCode, revokeJti } from "../services/pairing.js"
 import { writeAuditEvent } from "../services/audit-log.js"
 import { adminOnly } from "../middleware/admin-only.js"
+import { piDb } from "../db/outbox.js"
 
 const IssueSchema = z.object({ role: z.enum(["cashier", "manager"]) })
 const RedeemSchema = z.object({ code: z.string().length(8) })
@@ -52,6 +53,34 @@ export async function pairRoutes(app: FastifyInstance) {
           maxAge: 30 * 24 * 60 * 60,
         })
         .send({ ok: true, terminal_id: result.terminal_id })
+    },
+  )
+
+  // Admin lists paired tablets (devices UI on the local web app).
+  app.get(
+    "/admin/tablets",
+    { preHandler: adminOnly },
+    async (_req, reply) => {
+      const rows = piDb
+        .prepare(
+          `SELECT t.terminal_id, t.venue_id, t.role, t.paired_at, t.last_seen_at, t.jti,
+                  CASE WHEN r.jti IS NULL THEN 0 ELSE 1 END AS revoked
+           FROM paired_tablets t
+           LEFT JOIN revoked_jti r ON r.jti = t.jti
+           ORDER BY t.paired_at DESC`,
+        )
+        .all() as Array<{
+        terminal_id: string
+        venue_id: string
+        role: string
+        paired_at: number
+        last_seen_at: number | null
+        jti: string
+        revoked: 0 | 1
+      }>
+      return reply.send({
+        tablets: rows.map((r) => ({ ...r, revoked: r.revoked === 1 })),
+      })
     },
   )
 

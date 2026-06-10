@@ -1,14 +1,30 @@
 "use client"
-import { useState } from "react"
-import { Cpu, KeyRound } from "lucide-react"
-import { issuePairCodeAction } from "./actions"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { Cpu, KeyRound, TabletSmartphone } from "lucide-react"
+import { issuePairCodeAction, revokeTabletAction, type PairedTablet } from "./actions"
 import { Button } from "@/components/ui/button"
 
-export function DevicesView() {
+export function DevicesView({ tablets }: { tablets: PairedTablet[] | null }) {
+  const router = useRouter()
+  const [revoking, startRevoke] = useTransition()
   const [code, setCode] = useState<{ code: string; expires_at: number } | null>(null)
   const [role, setRole] = useState<"cashier" | "manager">("cashier")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const handleRevoke = (jti: string, terminal: string) => {
+    if (!window.confirm(`Tablet ${terminal.slice(0, 8)}… intrekken? Die moet daarna opnieuw gekoppeld worden.`)) return
+    setError(null)
+    startRevoke(async () => {
+      const res = await revokeTabletAction({ jti })
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      router.refresh()
+    })
+  }
 
   const handleGenerate = async () => {
     setBusy(true)
@@ -98,6 +114,71 @@ export function DevicesView() {
             </div>
           </div>
         ) : null}
+      </div>
+
+      {/* Paired tablets */}
+      <div className="rounded-lg border border-line-strong bg-paper-bright p-5 xl:col-span-3">
+        <div className="mb-4 flex items-center gap-2.5">
+          <span className="flex h-11 w-11 items-center justify-center rounded-md bg-charcoal-800">
+            <TabletSmartphone size={22} className="text-white" />
+          </span>
+          <div>
+            <div className="text-[18px] font-extrabold leading-none text-charcoal-900">
+              Gekoppelde tablets
+            </div>
+            <div className="mt-1.5 text-[13px] font-medium leading-none text-charcoal-500">
+              Intrekken blokkeert de tablet direct op de Pi-bridge (ook offline).
+            </div>
+          </div>
+        </div>
+
+        {tablets === null ? (
+          <p className="text-[14px] font-medium text-charcoal-500">
+            Kon de lijst niet ophalen — is de Pi-bridge bereikbaar?
+          </p>
+        ) : tablets.length === 0 ? (
+          <p className="text-[14px] font-medium text-charcoal-500">
+            Nog geen tablets gekoppeld — genereer hierboven een pairing-code.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-md border border-line">
+            {tablets.map((t, i) => (
+              <div
+                key={t.jti}
+                className={`flex items-center gap-4 px-4 py-3 ${i > 0 ? "border-t border-line" : ""}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-[15px] font-bold leading-none text-charcoal-900">
+                    {t.terminal_id.slice(0, 8)}…{" "}
+                    <span className="font-semibold text-charcoal-500">
+                      · {t.role === "manager" ? "Manager" : "Kassier"}
+                    </span>
+                  </div>
+                  <div className="hb-tabular mt-1 text-[13px] font-medium leading-none text-charcoal-500">
+                    Gekoppeld {new Date(t.paired_at).toLocaleString("nl-NL")}
+                    {t.last_seen_at
+                      ? ` · laatst gezien ${new Date(t.last_seen_at).toLocaleString("nl-NL")}`
+                      : ""}
+                  </div>
+                </div>
+                {t.revoked ? (
+                  <span className="rounded-md bg-brick-100 px-2.5 py-1.5 text-[12px] font-bold leading-none text-brick-600">
+                    Ingetrokken
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={revoking}
+                    onClick={() => handleRevoke(t.jti, t.terminal_id)}
+                    className="h-9 rounded-md border border-brick-600/30 bg-brick-100 px-3.5 text-[13px] font-bold text-brick-600 disabled:opacity-50"
+                  >
+                    Intrekken
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

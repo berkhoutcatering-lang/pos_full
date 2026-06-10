@@ -21,8 +21,9 @@ const STATION_LABEL: Record<string, string> = {
 const ERROR_TEXT: Record<string, string> = {
   name_exists: "Er bestaat al een item met deze naam.",
   validation: "Controleer de invoer.",
-  insert_failed: "Opslaan mislukt — is er internet? Menuwijzigingen gaan via Supabase.",
-  update_failed: "Opslaan mislukt — is er internet? Menuwijzigingen gaan via Supabase.",
+  insert_failed: "Opslaan mislukt.",
+  update_failed: "Opslaan mislukt.",
+  offline_failed: "Offline opslaan via de Pi-bridge lukte niet — is de pi-bridge service gezond?",
 }
 
 function parsePriceCents(raw: string): number | null {
@@ -179,6 +180,7 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formKey, setFormKey] = useState(0)
 
@@ -194,6 +196,7 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
       return
     }
     setError(null)
+    setNotice(null)
     startTransition(async () => {
       const payload = {
         name: form.name,
@@ -210,6 +213,9 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
         setError(ERROR_TEXT[res.error] ?? res.error)
         return
       }
+      if (res.queued) {
+        setNotice("Offline opgeslagen op de Pi — synct automatisch met de cloud zodra er internet is.")
+      }
       setEditingId(null)
       setFormKey((k) => k + 1) // reset het nieuw-item formulier
       router.refresh()
@@ -219,11 +225,15 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
   function remove(id: string, name: string) {
     if (!window.confirm(`"${name}" van het menu halen?`)) return
     setError(null)
+    setNotice(null)
     startTransition(async () => {
       const res = await deactivateMenuItemAction({ id })
       if (!res.ok) {
         setError(ERROR_TEXT[res.error] ?? res.error)
         return
+      }
+      if (res.queued) {
+        setNotice("Offline verwijderd op de Pi — synct automatisch met de cloud zodra er internet is.")
       }
       router.refresh()
     })
@@ -251,6 +261,11 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
           className="rounded-md bg-brick-100 px-4 py-3 text-[15px] font-semibold text-brick-600"
         >
           {error}
+        </p>
+      ) : null}
+      {notice ? (
+        <p className="rounded-md bg-hop-600/10 px-4 py-3 text-[15px] font-semibold text-hop-700">
+          {notice}
         </p>
       ) : null}
 

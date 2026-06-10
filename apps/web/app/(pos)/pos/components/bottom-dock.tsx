@@ -4,7 +4,6 @@ import {
   Archive,
   Banknote,
   CreditCard,
-  FileText,
   Pause,
   Pencil,
   Percent,
@@ -30,7 +29,6 @@ export function BottomDock({
   onUtility,
   onPay,
   onAfrekenen,
-  onOpRekening,
 }: {
   totalCents: number
   empty: boolean
@@ -43,7 +41,6 @@ export function BottomDock({
   onUtility: (a: UtilityAction) => void
   onPay: (method: "pin" | "cash") => void
   onAfrekenen: () => void
-  onOpRekening: () => void
 }) {
   return (
     <div className="flex h-[232px] flex-none gap-3">
@@ -125,19 +122,6 @@ export function BottomDock({
             className="border-line-strong bg-paper-bright text-charcoal-900 hover:bg-offwhite"
           />
         </div>
-
-        <button
-          type="button"
-          onClick={onOpRekening}
-          disabled={empty}
-          className={cn(
-            "flex h-[52px] flex-none items-center justify-center gap-2 rounded-md border border-line-strong bg-transparent text-[16px] font-bold leading-none text-charcoal-500",
-            "transition-[background] duration-[var(--dur-fast)] hover:bg-paper-bright",
-            empty && "cursor-not-allowed opacity-45"
-          )}
-        >
-          <FileText size={18} /> Op rekening
-        </button>
       </div>
     </div>
   )

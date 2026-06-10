@@ -29,10 +29,22 @@ async function flushOnce() {
         )
         continue
       }
-      if (row.operation === "upsert") {
+      if (row.table_name === "audit_event") {
+        // Queued SBA audit event (Supabase was unreachable at write time):
+        // replay via the same RPC so the advisory lock + hash trigger seal
+        // the chain — never a direct table insert.
+        const { error } = await supabaseAdmin.rpc(
+          "write_audit_log",
+          (payload as { rpc: Record<string, unknown> }).rpc,
+        )
+        if (error) throw error
+      } else if (row.operation === "upsert") {
+        // pos_menu_items has no idempotency_key column — its natural
+        // conflict target is the row id (offline menu edits).
+        const onConflict = row.table_name === "pos_menu_items" ? "id" : "idempotency_key"
         const { error } = await supabaseAdmin
           .from(row.table_name)
-          .upsert(payload, { onConflict: "idempotency_key", ignoreDuplicates: false })
+          .upsert(payload, { onConflict, ignoreDuplicates: false })
         if (error) throw error
       } else if (row.operation === "insert") {
         const { error } = await supabaseAdmin.from(row.table_name).insert(payload)
