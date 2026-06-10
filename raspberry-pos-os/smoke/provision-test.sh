@@ -94,6 +94,8 @@ openssl x509 -in /etc/pi-bridge/tls/cert.pem -noout -ext subjectAltName | grep -
 openssl x509 -in /etc/pi-bridge/tls/cert.pem -noout -ext subjectAltName | grep -q '10.42.0.1' \
   || fail "SAN AP-IP missing"
 [ -f /boot/firmware/pos-setup/hopbites-ca.crt ] || fail "CA not exported to boot partition"
+[ "$(stat -c %a /usr/local/share/ca-certificates/hopbites-ca.crt)" = "644" ] \
+  || fail "system CA copy not world-readable (posweb needs it for NODE_EXTRA_CA_CERTS)"
 [ -f /boot/firmware/pos-setup/STATUS.txt ] || fail "STATUS.txt not written"
 grep -q 'Config OK' /boot/firmware/pos-setup/STATUS.txt || fail "STATUS.txt does not report Config OK"
 grep -q "Access point: SSID 'HopBites-POS'" /boot/firmware/pos-setup/STATUS.txt || fail "STATUS.txt does not mention AP"

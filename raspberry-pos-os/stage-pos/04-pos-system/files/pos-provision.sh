@@ -189,10 +189,16 @@ if [ "${NEED_TLS}" = 1 ]; then
   echo "${SANS}" > "${TLS_DIR}/.sans"
   chown root:posbridge "${TLS_DIR}/key.pem" "${TLS_DIR}/cert.pem"
   chmod 640 "${TLS_DIR}/key.pem" "${TLS_DIR}/cert.pem"
-  # Trust our CA system-wide (curl/node debugging on the Pi itself).
+  # Trust our CA system-wide (pos-web's NODE_EXTRA_CA_CERTS + curl/node
+  # debugging). chmod expliciet: dit blok draait onder umask 077 en een
+  # 600-root CA is voor de posweb-user onleesbaar → "fetch failed" op elke
+  # server-side pi-bridge call.
   cp "${TLS_DIR}/ca.crt" /usr/local/share/ca-certificates/hopbites-ca.crt
+  chmod 644 /usr/local/share/ca-certificates/hopbites-ca.crt
   update-ca-certificates >/dev/null 2>&1
 fi
+# Heal images provisioned before the chmod fix above.
+[ -f /usr/local/share/ca-certificates/hopbites-ca.crt ] && chmod 644 /usr/local/share/ca-certificates/hopbites-ca.crt
 # Always export the CA for tablets, so it survives re-flashing pos-setup/.
 cp -f "${TLS_DIR}/ca.crt" "${SETUP_DIR}/hopbites-ca.crt" 2>/dev/null
 
