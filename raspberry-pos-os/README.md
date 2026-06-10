@@ -111,6 +111,12 @@ herstart de Pi.
   eenmalig via SSH met `rpi-connect signin` (Raspberry Pi ID nodig). Daarna
   bereikbaar op https://connect.raspberrypi.com. Let op: alleen shell-toegang;
   screen sharing vereist een desktop en zit niet in dit Lite-image.
+  **Pi Connect heeft internet op de Pi nodig** (clouddienst): in AP-modus dus
+  een uplink via ethernet of USB-tethering — de signin geeft anders een
+  API-error. Zit je zelf op het AP-netwerk, dan is Pi Connect overbodig:
+  `ssh hopbites@hopbites.local` werkt daar direct. Zonder internet staat een
+  gekoppelde Pi gewoon als "unreachable" en verbindt hij automatisch opnieuw
+  zodra er weer internet is.
 - Logs: `journalctl -u pos-web -f` (web-app), `journalctl -u pi-bridge -f`,
   provisioning: `journalctl -u pos-provision`.
 - Health: `curl -k https://hopbites.local:3001/_health` en
