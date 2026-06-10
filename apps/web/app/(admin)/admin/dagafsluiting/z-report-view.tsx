@@ -21,13 +21,27 @@ const BTW_LABELS: Record<string, string> = {
 export function ZReportView({ report }: { report: ZReport }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  // Dag afsluiten is onomkeerbaar (één Z-bon per dag, verzegeld in de
+  // audit-chain) — dus twee-staps: eerste tik wapent, tweede bevestigt.
+  const [armed, setArmed] = useState(false)
 
   const handleClose = async () => {
+    if (!armed) {
+      setArmed(true)
+      setMsg(null)
+      setTimeout(() => setArmed(false), 4000)
+      return
+    }
+    setArmed(false)
     setBusy(true)
     setMsg(null)
     const res = await closeDayAction({ date: report.date })
     setBusy(false)
-    setMsg(res.ok ? "Dag afgesloten + audit_log geschreven." : `Fout: ${res.error}`)
+    setMsg(
+      res.ok
+        ? "Dag afgesloten — Z-bon gaat naar de printer."
+        : "Afsluiten mislukt — is er internet? Probeer het opnieuw.",
+    )
   }
 
   const gem =
@@ -51,12 +65,16 @@ export function ZReportView({ report }: { report: ZReport }) {
         sub={`Z-bon voor ${report.date}`}
         action={
           <Button
-            variant="primary"
+            variant={armed ? "danger" : "primary"}
             icon={<Printer size={18} />}
             onClick={handleClose}
             disabled={busy}
           >
-            {busy ? "Bezig…" : "Print Z-bon"}
+            {busy
+              ? "Bezig…"
+              : armed
+                ? "Zeker weten? Dag definitief afsluiten"
+                : "Dag afsluiten + Z-bon printen"}
           </Button>
         }
       />
