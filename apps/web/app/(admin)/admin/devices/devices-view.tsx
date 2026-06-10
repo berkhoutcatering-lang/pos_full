@@ -74,7 +74,7 @@ export function DevicesView({ tablets }: { tablets: PairedTablet[] | null }) {
             </div>
             <div className="mt-1.5 text-[13px] font-medium leading-none text-charcoal-500">
               Genereer een pairing-code en voer die in op de tablet bij{" "}
-              <code className="font-semibold text-charcoal-800">https://hopbites.local</code>
+              <code className="font-semibold text-charcoal-800">https://hopbites.local/pair</code>
             </div>
           </div>
         </div>
