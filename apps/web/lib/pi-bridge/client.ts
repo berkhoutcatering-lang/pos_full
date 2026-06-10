@@ -50,11 +50,23 @@ export interface PlaceOrderPayload {
     modifiers: Array<{ id: string; name: string; price_delta_cents: number }>
     note?: string | null
   }>
-  totals: { excl_cents: number; btw_cents: number; incl_cents: number }
+  totals: {
+    excl_cents: number
+    btw_cents: number
+    incl_cents: number
+    subtotal_cents?: number
+    discount_cents?: number
+  }
 }
 
 export function placeOrderViaPi(payload: PlaceOrderPayload) {
-  return call<{ ok: boolean; queued: boolean; dedup?: boolean }>("/orders/create", {
+  return call<{
+    ok: boolean
+    queued: boolean
+    dedup?: boolean
+    queue_label?: string
+    daily_seq?: number
+  }>("/orders/create", {
     method: "POST",
     body: JSON.stringify(payload),
   })

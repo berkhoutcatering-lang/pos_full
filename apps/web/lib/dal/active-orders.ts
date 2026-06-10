@@ -118,6 +118,8 @@ interface PendingOrderPayload {
   order_id: string
   venue_id: string
   customer_label?: string | null
+  ordered_label?: string | null
+  placed_at?: string | null
   items: Array<{
     id: string
     menu_item_id: string
@@ -154,10 +156,10 @@ async function overlayPendingOutbox(
       if (byId.has(p.order_id)) continue // already flushed into the snapshot
       byId.set(p.order_id, {
         id: p.order_id,
-        ordered_label: p.customer_label ?? `#${p.order_id.slice(0, 4).toUpperCase()}`,
+        ordered_label: p.ordered_label ?? p.customer_label ?? `#${p.order_id.slice(0, 4).toUpperCase()}`,
         customer_name: p.customer_label ?? null,
         status: "placed",
-        placed_at: new Date(entry.created_at).toISOString(),
+        placed_at: p.placed_at ?? new Date(entry.created_at).toISOString(),
         prepared_at: null,
         total_incl_cents: p.totals?.incl_cents ?? 0,
         items: (p.items ?? []).map((it) => ({

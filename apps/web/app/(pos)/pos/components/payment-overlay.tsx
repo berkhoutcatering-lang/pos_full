@@ -53,6 +53,8 @@ export function PaymentOverlay({
 }) {
   const [step, setStep] = useState<Step>(initialMethod ?? "choose")
   const [paidMethod, setPaidMethod] = useState<CheckoutMethod | null>(null)
+  // Afroepnummer van de Pi (bestaat ook offline); fallback = klantnaam.
+  const [queueLabel, setQueueLabel] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const connection = useConnectionStatus()
@@ -87,6 +89,8 @@ export function PaymentOverlay({
         excl_cents: priced.total_excl_cents,
         btw_cents: priced.total_btw_cents,
         incl_cents: priced.total_incl_cents,
+        subtotal_cents: priced.subtotal_cents,
+        discount_cents: priced.discount_cents,
       },
     }
 
@@ -94,6 +98,8 @@ export function PaymentOverlay({
     // returns synchronously; the Server Action writes through Supabase if
     // the Pi is unreachable.
     const pi = await placeOrderViaPi(payload)
+    const piLabel = pi.ok ? (pi.data.queue_label ?? null) : null
+    if (piLabel) setQueueLabel(piLabel)
     if (!pi.ok) {
       const fallback = await placeOrderAction({
         idempotency_key,
@@ -126,7 +132,7 @@ export function PaymentOverlay({
       if (!fallback.ok) return { ok: false, error: fallback.error ?? "place_failed" }
     }
 
-    const order_label = cart.customer_name ?? "#"
+    const order_label = piLabel ?? cart.customer_name ?? "#"
 
     // Fire-and-forget prints; stable keys so a double-tap never double-prints.
     void printKitchenViaPi({
@@ -289,6 +295,16 @@ export function PaymentOverlay({
               Betaald ·{" "}
               <span className="hb-tabular">{euroCents(priced.total_incl_cents)}</span>
             </div>
+            {queueLabel ? (
+              <div className="rounded-lg bg-charcoal-900 px-8 py-4">
+                <div className="text-[13px] font-bold uppercase tracking-[0.18em] text-charcoal-400">
+                  Afroepnummer
+                </div>
+                <div className="hb-tabular text-[56px] font-black leading-none text-offwhite">
+                  {queueLabel}
+                </div>
+              </div>
+            ) : null}
             <div className="text-[17px] font-medium leading-[1.3] text-charcoal-500">
               {paidMethod === "pin"
                 ? "PIN / contactloos geslaagd"

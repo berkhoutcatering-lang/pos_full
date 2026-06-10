@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { authenticateTablet } from "../middleware/auth-tablet.js"
-import { enqueueOutbox } from "../db/outbox.js"
+import { enqueueOutbox, getOutboxPayload, nextQueueNumber } from "../db/outbox.js"
 import { writeAuditEvent } from "../services/audit-log.js"
 import { ULID_RE } from "../utils/ulid.js"
 import { config } from "../config.js"
@@ -33,6 +33,8 @@ const PlaceOrderSchema = z.object({
     excl_cents: z.number().int().nonnegative(),
     btw_cents: z.number().int().nonnegative(),
     incl_cents: z.number().int().nonnegative(),
+    subtotal_cents: z.number().int().nonnegative().optional(),
+    discount_cents: z.number().int().nonnegative().optional(),
   }),
 })
 
@@ -62,22 +64,42 @@ export async function orderRoutes(app: FastifyInstance) {
         return reply.code(403).send({ error: "org_mismatch" })
       }
 
+      // De Pi geeft het afroepnummer uit zodat het ook zonder internet
+      // bestaat; de cloud-trigger respecteert een aangeleverde daily_seq.
+      const daily_seq = nextQueueNumber(claims.venue_id)
+      const ordered_label = `#${daily_seq}`
+      const payload = {
+        ...parsed.data,
+        daily_seq,
+        ordered_label,
+        terminal_id: claims.terminal_id,
+        placed_at: new Date().toISOString(),
+      }
+
       const enqueued = enqueueOutbox({
         idempotency_key: parsed.data.idempotency_key,
         operation: "insert",
         table_name: "pos_orders",
-        payload: parsed.data,
+        payload,
         venue_id: claims.venue_id,
       })
 
       if (!enqueued.enqueued) {
         return reply.code(503).send({ error: enqueued.reason ?? "outbox_unavailable" })
       }
+      if (enqueued.reason === "duplicate") {
+        // Retry van dezelfde order: geef het oorspronkelijke nummer terug
+        // (de teller is helaas al opgehoogd — een gat in de reeks is ok).
+        const existing = getOutboxPayload(parsed.data.idempotency_key)
+        const label = (existing?.ordered_label as string | undefined) ?? ordered_label
+        return reply.send({ ok: true, queued: true, dedup: true, queue_label: label })
+      }
 
       await writeAuditEvent({
         event_type: "order.placed",
         payload: {
           order_id: parsed.data.order_id,
+          ordered_label,
           total_incl_cents: parsed.data.totals.incl_cents,
           item_count: parsed.data.items.length,
         },
@@ -85,7 +107,7 @@ export async function orderRoutes(app: FastifyInstance) {
         venue_id: claims.venue_id,
       })
 
-      return reply.send({ ok: true, queued: true, dedup: enqueued.reason === "duplicate" })
+      return reply.send({ ok: true, queued: true, dedup: false, queue_label: ordered_label, daily_seq })
     },
   )
 
@@ -101,7 +123,7 @@ export async function orderRoutes(app: FastifyInstance) {
         idempotency_key: parsed.data.idempotency_key,
         operation: "upsert",
         table_name: "pos_order_state_changes",
-        payload: parsed.data,
+        payload: { ...parsed.data, terminal_id: claims.terminal_id },
         venue_id: claims.venue_id,
       })
 

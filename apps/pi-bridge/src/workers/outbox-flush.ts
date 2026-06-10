@@ -29,7 +29,15 @@ async function flushOnce() {
         )
         continue
       }
-      if (row.table_name === "audit_event") {
+      if (row.table_name === "pos_orders" && row.operation === "insert") {
+        // Payload past niet 1-op-1 op de tabel (items[], totals{}) — de
+        // ingest-RPC vertaalt en is idempotent op idempotency_key.
+        const { error } = await supabaseAdmin.rpc("ingest_pos_order", { p: payload })
+        if (error) throw error
+      } else if (row.table_name === "pos_order_state_changes") {
+        const { error } = await supabaseAdmin.rpc("ingest_pos_state_change", { p: payload })
+        if (error) throw error
+      } else if (row.table_name === "audit_event") {
         // Queued SBA audit event (Supabase was unreachable at write time):
         // replay via the same RPC so the advisory lock + hash trigger seal
         // the chain — never a direct table insert.

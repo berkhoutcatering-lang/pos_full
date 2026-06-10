@@ -92,6 +92,16 @@ piDb.exec(`
   );
   CREATE INDEX IF NOT EXISTS print_log_expires ON print_log(expires_at);
 
+  -- Volgnummers per venue per dag — de Pi is dé uitgever zodat het
+  -- afroepnummer ook zonder internet bestaat; de cloud-trigger respecteert
+  -- een aangeleverde daily_seq.
+  CREATE TABLE IF NOT EXISTS queue_counters (
+    venue_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    PRIMARY KEY (venue_id, day)
+  );
+
   -- Refund-intent mirror — Phase 2 deferred P1. The myPOS API has its
   -- own Idempotency-Key dedup window (~24h), but a delayed retry past
   -- that window could fire a second refund. We mirror locally with no
@@ -161,6 +171,36 @@ export function enqueueOutbox(args: {
       return { enqueued: true, reason: "duplicate" }
     }
     throw err
+  }
+}
+
+// Europe/Amsterdam dag-string zodat de teller om middernacht NL reset.
+function amsterdamDay(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(new Date())
+}
+
+export function nextQueueNumber(venueId: string): number {
+  const row = piDb
+    .prepare(
+      `INSERT INTO queue_counters (venue_id, day, seq) VALUES (?, ?, 1)
+       ON CONFLICT (venue_id, day) DO UPDATE SET seq = seq + 1
+       RETURNING seq`,
+    )
+    .get(venueId, amsterdamDay()) as { seq: number }
+  return row.seq
+}
+
+// Bij een idempotente retry van /orders/create moet hetzelfde volgnummer
+// terugkomen — haal het uit de eerder ge-enqueuede payload.
+export function getOutboxPayload(idempotencyKey: string): Record<string, unknown> | null {
+  const row = piDb
+    .prepare(`SELECT payload_json FROM outbox WHERE idempotency_key = ?`)
+    .get(idempotencyKey) as { payload_json: string } | undefined
+  if (!row) return null
+  try {
+    return JSON.parse(row.payload_json) as Record<string, unknown>
+  } catch {
+    return null
   }
 }
 
