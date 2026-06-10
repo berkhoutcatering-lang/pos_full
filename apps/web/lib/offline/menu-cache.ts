@@ -37,7 +37,7 @@ export async function applyMenuMutationToLocalCaches(args: {
         base_price_cents: args.item.base_price_cents,
         btw_class: args.item.btw_class as MenuSnapshot["items"][number]["btw_class"],
         is_discountable: args.item.is_discountable,
-        available_modifier_group_ids: [],
+        available_modifier_group_ids: args.item.available_modifier_group_ids ?? [],
         image_url: null,
       })
     }

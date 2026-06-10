@@ -38,6 +38,7 @@ const ItemFields = z.object({
   btw_class: BtwClass,
   station: z.enum(["grill", "fryer", "cold", "bar"]).default("grill"),
   is_discountable: z.boolean().default(true),
+  available_modifier_group_ids: z.array(z.string().uuid()).max(10).default([]),
 })
 
 const CreateSchema = ItemFields
@@ -84,6 +85,7 @@ async function upsertViaPi(
     btw_class: item.btw_class,
     station: item.station,
     is_discountable: item.is_discountable,
+    available_modifier_group_ids: item.available_modifier_group_ids,
     is_active: isActive,
   })
   if (!res.ok) return { ok: false, error: "offline_failed" }
@@ -99,6 +101,7 @@ async function upsertViaPi(
       station: item.station,
       is_discountable: item.is_discountable,
       sort_order: 100,
+      available_modifier_group_ids: item.available_modifier_group_ids,
     },
     remove: !isActive,
   })
@@ -126,6 +129,7 @@ export async function createMenuItemAction(raw: unknown): Promise<Result> {
     btw_class: item.btw_class,
     station: item.station,
     is_discountable: item.is_discountable,
+    available_modifier_group_ids: item.available_modifier_group_ids,
   })
   if (error) {
     if (isNetworkError(error)) return upsertViaPi(claims, item, true)
@@ -161,6 +165,7 @@ export async function updateMenuItemAction(raw: unknown): Promise<Result> {
       btw_class: item.btw_class,
       station: item.station,
       is_discountable: item.is_discountable,
+      available_modifier_group_ids: item.available_modifier_group_ids,
     })
     .eq("id", item.id)
     .eq("org_id", claims.orgId)
@@ -216,6 +221,7 @@ export async function deactivateMenuItemAction(raw: unknown): Promise<Result> {
           btw_class: existing.btw_class as z.infer<typeof BtwClass>,
           station: existing.station as ItemInput["station"],
           is_discountable: existing.is_discountable,
+          available_modifier_group_ids: existing.available_modifier_group_ids ?? [],
         },
         false,
       )

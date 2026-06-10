@@ -1,7 +1,7 @@
 "use client"
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import type { AdminMenuItem } from "@/lib/dal/admin-menu"
+import type { AdminMenuItem, AdminModifierGroup } from "@/lib/dal/admin-menu"
 import { BTW_CLASS_LABEL } from "@/lib/pos/btw"
 import { accentForCategory, labelForCategory } from "@/lib/pos/menu-groups"
 import { euroCents } from "@/lib/format"
@@ -39,6 +39,7 @@ interface FormState {
   btw_class: string
   station: string
   is_discountable: boolean
+  modifier_group_ids: string[]
 }
 
 const EMPTY_FORM: FormState = {
@@ -48,6 +49,7 @@ const EMPTY_FORM: FormState = {
   btw_class: "food_9",
   station: "grill",
   is_discountable: true,
+  modifier_group_ids: [],
 }
 
 function ItemForm({
@@ -55,6 +57,7 @@ function ItemForm({
   busy,
   submitLabel,
   categories,
+  groups,
   onSubmit,
   onCancel,
 }: {
@@ -62,6 +65,7 @@ function ItemForm({
   busy: boolean
   submitLabel: string
   categories: string[]
+  groups: AdminModifierGroup[]
   onSubmit: (f: FormState) => void
   onCancel?: () => void
 }) {
@@ -145,6 +149,34 @@ function ItemForm({
           ))}
         </select>
       </label>
+      {groups.length > 0 ? (
+        <div className="col-span-2 lg:col-span-6">
+          <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+            Optiegroepen voor dit item
+          </span>
+          <div className="flex flex-wrap gap-x-5 gap-y-2">
+            {groups.map((g) => (
+              <label key={g.id} className="flex items-center gap-2 text-[14px] font-semibold text-charcoal-700">
+                <input
+                  type="checkbox"
+                  checked={form.modifier_group_ids.includes(g.id)}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      modifier_group_ids: e.target.checked
+                        ? [...form.modifier_group_ids, g.id]
+                        : form.modifier_group_ids.filter((id) => id !== g.id),
+                    })
+                  }
+                  className="h-4 w-4"
+                />
+                {g.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-end gap-3">
         <label className="flex h-12 items-center gap-2 text-[14px] font-semibold text-charcoal-700">
           <input
@@ -176,7 +208,13 @@ function ItemForm({
   )
 }
 
-export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
+export function MenuEditor({
+  items,
+  groups,
+}: {
+  items: AdminMenuItem[]
+  groups: AdminModifierGroup[]
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -205,6 +243,7 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
         btw_class: form.btw_class,
         station: form.station,
         is_discountable: form.is_discountable,
+        available_modifier_group_ids: form.modifier_group_ids,
       }
       const res = id
         ? await updateMenuItemAction({ ...payload, id })
@@ -251,6 +290,7 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
           busy={pending}
           submitLabel="Toevoegen"
           categories={categories}
+          groups={groups}
           onSubmit={(f) => run(f)}
         />
       </div>
@@ -303,10 +343,12 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
                         btw_class: it.btw_class,
                         station: it.station,
                         is_discountable: it.is_discountable,
+                        modifier_group_ids: it.available_modifier_group_ids ?? [],
                       }}
                       busy={pending}
                       submitLabel="Opslaan"
                       categories={categories}
+                      groups={groups}
                       onSubmit={(f) => run(f, it.id)}
                       onCancel={() => setEditingId(null)}
                     />
@@ -321,6 +363,9 @@ export function MenuEditor({ items }: { items: AdminMenuItem[] }) {
                           {" · "}
                           {STATION_LABEL[it.station] ?? it.station}
                           {!it.is_discountable ? " · niet kortbaar" : ""}
+                          {(it.available_modifier_group_ids?.length ?? 0) > 0
+                            ? ` · ${it.available_modifier_group_ids.length} optiegroep${it.available_modifier_group_ids.length > 1 ? "en" : ""}`
+                            : ""}
                         </div>
                       </div>
                       <span className="hb-tabular min-w-[78px] text-right text-[16px] font-bold leading-none text-charcoal-900">

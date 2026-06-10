@@ -24,6 +24,7 @@ const MenuUpsertSchema = z.object({
   btw_class: z.enum(["food_9", "alcohol_21", "soda_21", "nonalc_beer_9", "deposit_0", "service_0"]),
   station: z.string().min(1).max(20).default("grill"),
   is_discountable: z.boolean().default(true),
+  available_modifier_group_ids: z.array(z.string().uuid()).max(10).default([]),
   is_active: z.boolean().default(true),
 })
 
@@ -87,6 +88,7 @@ export async function menuAdminRoutes(app: FastifyInstance) {
               effective_price_cents: item.base_price_cents,
               btw_class: item.btw_class,
               category: item.category,
+              available_modifier_group_ids: item.available_modifier_group_ids,
               is_available: true,
             },
           ],

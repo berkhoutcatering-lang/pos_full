@@ -29,6 +29,7 @@ export interface MenuUpsertViaPi {
   btw_class: string
   station: string
   is_discountable: boolean
+  available_modifier_group_ids: string[]
   is_active: boolean
 }
 
