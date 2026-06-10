@@ -24,6 +24,14 @@ export function ZReportView({ report }: { report: ZReport }) {
   // Dag afsluiten is onomkeerbaar (één Z-bon per dag, verzegeld in de
   // audit-chain) — dus twee-staps: eerste tik wapent, tweede bevestigt.
   const [armed, setArmed] = useState(false)
+  // Geteld contant (euro-input, bv. "123,45"); leeg = niet geteld.
+  const [counted, setCounted] = useState("")
+
+  const countedCents = (() => {
+    const cleaned = counted.trim().replace("€", "").replace(",", ".")
+    if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null
+    return Math.round(parseFloat(cleaned) * 100)
+  })()
 
   const handleClose = async () => {
     if (!armed) {
@@ -35,7 +43,10 @@ export function ZReportView({ report }: { report: ZReport }) {
     setArmed(false)
     setBusy(true)
     setMsg(null)
-    const res = await closeDayAction({ date: report.date })
+    const res = await closeDayAction({
+      date: report.date,
+      counted_cash_cents: countedCents,
+    })
     setBusy(false)
     setMsg(
       res.ok
@@ -78,6 +89,51 @@ export function ZReportView({ report }: { report: ZReport }) {
           </Button>
         }
       />
+
+      {/* Kassa tellen: verwacht contant vs geteld → kasverschil de Z-bon in */}
+      <div className="mb-4 flex max-w-[560px] flex-wrap items-end gap-4 rounded-lg border border-line-strong bg-paper-bright p-4">
+        <div>
+          <div className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+            Verwacht contant
+          </div>
+          <div className="hb-tabular text-[20px] font-extrabold leading-none text-charcoal-900">
+            {euroCents(report.payment_split.cash_cents)}
+          </div>
+        </div>
+        <label>
+          <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+            Geteld in de lade
+          </span>
+          <input
+            inputMode="decimal"
+            value={counted}
+            onChange={(e) => setCounted(e.target.value)}
+            placeholder="0,00"
+            className="hb-tabular h-11 w-32 rounded-md border border-line-strong bg-paper px-3 text-right text-[16px] font-bold text-charcoal-900 outline-none"
+          />
+        </label>
+        {countedCents !== null ? (
+          <div>
+            <div className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+              Kasverschil
+            </div>
+            <div
+              className={`hb-tabular text-[20px] font-extrabold leading-none ${
+                countedCents - report.payment_split.cash_cents === 0
+                  ? "text-hop-700"
+                  : "text-brick-600"
+              }`}
+            >
+              {countedCents - report.payment_split.cash_cents >= 0 ? "+" : ""}
+              {euroCents(countedCents - report.payment_split.cash_cents)}
+            </div>
+          </div>
+        ) : counted.trim() !== "" ? (
+          <div className="text-[13px] font-semibold text-brick-600">
+            Bedrag niet herkend — bv. 123,45
+          </div>
+        ) : null}
+      </div>
 
       <div className="mb-4 flex items-center gap-3">
         <HashChainBadge />

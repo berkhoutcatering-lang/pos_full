@@ -5,7 +5,12 @@ import { createClient as createSbClient } from "@supabase/supabase-js"
 import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { computeZReport } from "@/lib/dal/dagafsluiting"
 
-const Schema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+const Schema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // Geteld contant in de lade — het kasverschil t.o.v. de verwachte
+  // contant-omzet gaat mee de verzegelde Z-bon in.
+  counted_cash_cents: z.number().int().min(0).max(10_000_000).nullable().optional(),
+})
 
 function admin() {
   return createSbClient(
@@ -31,6 +36,14 @@ export async function closeDayAction(
 
   const supabase = admin()
 
+  const counted = parsed.data.counted_cash_cents ?? null
+  const cashDiff = counted === null ? null : counted - report.payment_split.cash_cents
+  const reportJson = {
+    ...report,
+    counted_cash_cents: counted,
+    cash_diff_cents: cashDiff,
+  }
+
   // Idempotency: unique (org_id, venue_id, business_date) collapses retries.
   const idempotency_key = ulid()
   const { error: insertErr } = await supabase
@@ -40,7 +53,7 @@ export async function closeDayAction(
       venue_id: claims.venueId,
       business_date: parsed.data.date,
       closed_by_user_id: claims.userId,
-      report_json: report,
+      report_json: reportJson,
       idempotency_key,
     })
   if (insertErr) {
@@ -61,6 +74,8 @@ export async function closeDayAction(
     p_event_type: "shift.closed",
     p_payload: {
       business_date: parsed.data.date,
+      counted_cash_cents: counted,
+      cash_diff_cents: cashDiff,
       total_incl_cents: report.total_incl_cents,
       total_btw_cents: report.total_btw_cents,
       order_count: report.order_count,

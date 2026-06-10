@@ -56,8 +56,7 @@ nieuwer** (oudere images syncen geen orders naar de cloud — niet gebruiken).
 
 | Beperking | Workaround |
 |---|---|
-| Refund van een betaalde order heeft geen kassa-UI | Cash: handmatig uit de lade; PIN: refund via de myPOS-app. Order op de KDS op "geannuleerd" zetten kan via terugslepen + geschiedenis. |
-| Bon herprinten heeft (nog) geen knop | Keukenbon: order terugslepen naar Geplaatst en weer vooruit print niet opnieuw — noteer het ordernummer en schrijf desnoods met de hand. |
+| Refund-registratie vereist internet (knop "Terugbetalen" in KDS-geschiedenis, manager-only) | Geld zelf kan altijd direct handmatig retour (lade / myPOS-app); registreer de refund 's avonds alsnog. |
 | Dagafsluiting offline | Doe hem 's avonds thuis met internet — de cijfers zijn dan compleet gesynct. |
 | Menu/optiegroepen/deals bewerken offline | Alleen losse items toevoegen werkt offline; groepen/deals thuis voorbereiden. |
 | Eerste login van een NIEUW account | Vereist internet — regel accounts de avond ervoor. |

@@ -1,7 +1,10 @@
 "use client"
 import { useCallback, useEffect, useState } from "react"
-import { History, RotateCcw, X } from "lucide-react"
+import { Euro, History, Printer, RotateCcw, X } from "lucide-react"
+import { ulid } from "ulid"
 import type { HistoryOrder } from "@/lib/dal/active-orders"
+import { printKitchenViaPi } from "@/lib/pi-bridge/client"
+import { refundOrderAction } from "../actions"
 import { euroCents } from "@/lib/format"
 
 // Geschiedenis-lade op de KDS: vandaag uitgegeven/geannuleerde bonnen.
@@ -21,6 +24,53 @@ export function HistoryPanel({
 }) {
   const [orders, setOrders] = useState<HistoryOrder[] | null>(null)
   const [error, setError] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  // Herprint keukenbon: rechtstreeks tablet → Pi (werkt dus ook offline);
+  // nieuwe idempotency-key zodat de print_log-dedup een bewuste herprint
+  // niet blokkeert.
+  const reprint = async (o: HistoryOrder) => {
+    setNotice(null)
+    const res = await printKitchenViaPi({
+      idempotency_key: ulid(),
+      order_id: o.id,
+      order_label: o.ordered_label ?? o.customer_name ?? "#",
+      items: o.items.map((it) => ({
+        name: it.name,
+        qty: it.qty,
+        modifiers: Array.isArray(it.modifiers_json)
+          ? (it.modifiers_json as Array<{ name: string }>).map((m) => m.name)
+          : [],
+        note: it.notes ?? undefined,
+      })),
+    })
+    setNotice(
+      res.ok && res.data.ok
+        ? `Keukenbon ${o.ordered_label ?? ""} opnieuw geprint.`
+        : "Printen mislukt — is de printer bereikbaar?",
+    )
+  }
+
+  const refund = async (o: HistoryOrder) => {
+    const reason = window.prompt(
+      `Reden voor terugbetaling van ${o.ordered_label ?? "deze bon"} (${euroCents(o.total_incl_cents)})?`,
+    )
+    if (!reason || reason.trim().length < 3) return
+    setNotice(null)
+    const res = await refundOrderAction({ order_id: o.id, reason: reason.trim() })
+    if (!res.ok) {
+      setNotice(
+        res.error === "offline"
+          ? "Terugbetalen registreren vereist internet — geld kan wel alvast handmatig terug."
+          : res.error === "not_refundable"
+            ? "Deze bon is al terugbetaald of nog actief."
+            : "Terugbetalen mislukt — alleen managers mogen dit.",
+      )
+      return
+    }
+    setNotice(`${o.ordered_label ?? "Bon"} gemarkeerd als terugbetaald — geld handmatig retour (lade of myPOS-app).`)
+    void load()
+  }
 
   const load = useCallback(async () => {
     const res = await fetch("/api/keuken/history", {
@@ -67,6 +117,11 @@ export function HistoryPanel({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {notice ? (
+            <p className="mb-3 rounded-md bg-charcoal-900 px-4 py-3 text-[13px] font-semibold text-offwhite">
+              {notice}
+            </p>
+          ) : null}
           {error ? (
             <p className="text-[14px] font-semibold text-brick-600">
               Kon de geschiedenis niet laden.
@@ -97,10 +152,16 @@ export function HistoryPanel({
                       className={`ml-auto rounded px-2 py-1 text-[12px] font-bold leading-none ${
                         o.status === "voided"
                           ? "bg-brick-100 text-brick-600"
-                          : "bg-hop-600/10 text-hop-700"
+                          : o.status === "refunded"
+                            ? "bg-amber-600/15 text-amber-700"
+                            : "bg-hop-600/10 text-hop-700"
                       }`}
                     >
-                      {o.status === "voided" ? "Geannuleerd" : "Uitgegeven"}
+                      {o.status === "voided"
+                        ? "Geannuleerd"
+                        : o.status === "refunded"
+                          ? "Terugbetaald"
+                          : "Uitgegeven"}
                     </span>
                   </div>
                   <div className="hb-tabular mt-1.5 text-[13px] font-medium leading-none text-charcoal-500">
@@ -114,16 +175,34 @@ export function HistoryPanel({
                   <div className="mt-2 text-[14px] font-semibold leading-[1.4] text-charcoal-700">
                     {o.items.map((it) => `${it.qty}× ${it.name}`).join(" · ")}
                   </div>
-                  {o.status === "served" ? (
+                  <div className="mt-2.5 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={restoring}
-                      onClick={() => onRestore(o.id)}
-                      className="mt-2.5 inline-flex h-10 items-center gap-2 rounded-md border border-line-strong bg-paper px-3.5 text-[13px] font-bold text-charcoal-700 disabled:opacity-50"
+                      onClick={() => void reprint(o)}
+                      className="inline-flex h-10 items-center gap-2 rounded-md border border-line-strong bg-paper px-3.5 text-[13px] font-bold text-charcoal-700"
                     >
-                      <RotateCcw size={15} /> Terugzetten naar Klaar
+                      <Printer size={15} /> Print keukenbon
                     </button>
-                  ) : null}
+                    {o.status === "served" ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={restoring}
+                          onClick={() => onRestore(o.id)}
+                          className="inline-flex h-10 items-center gap-2 rounded-md border border-line-strong bg-paper px-3.5 text-[13px] font-bold text-charcoal-700 disabled:opacity-50"
+                        >
+                          <RotateCcw size={15} /> Terugzetten naar Klaar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void refund(o)}
+                          className="inline-flex h-10 items-center gap-2 rounded-md border border-amber-600/30 bg-amber-600/10 px-3.5 text-[13px] font-bold text-amber-700"
+                        >
+                          <Euro size={15} /> Terugbetalen
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 </article>
               ))}
             </div>

@@ -69,11 +69,17 @@ export interface HistoryOrder {
   id: string
   ordered_label: string | null
   customer_name: string | null
-  status: "served" | "voided"
+  status: "served" | "voided" | "refunded"
   placed_at: string
   served_at: string | null
   total_incl_cents: number
-  items: Array<{ id: string; name: string; qty: number }>
+  items: Array<{
+    id: string
+    name: string
+    qty: number
+    modifiers_json: unknown
+    notes: string | null
+  }>
 }
 
 // Vandaag uitgegeven/geannuleerde bonnen, nieuwste eerst. Offline: de
@@ -93,11 +99,11 @@ export async function listOrderHistory(args: {
     .from("pos_orders")
     .select(
       `id, ordered_label, customer_name, status, placed_at, served_at, total_incl_cents,
-       items:pos_order_items (id, name, qty)`,
+       items:pos_order_items (id, name, qty, modifiers_json, notes)`,
     )
     .eq("org_id", args.orgId)
     .eq("venue_id", args.venueId)
-    .in("status", ["served", "voided"])
+    .in("status", ["served", "voided", "refunded"])
     .gte("placed_at", startOfDay.toISOString())
     .order("placed_at", { ascending: false })
     .limit(100)

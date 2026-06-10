@@ -2,6 +2,7 @@
 import { z } from "zod"
 import { requireRole, requireVenue } from "@/lib/dal/auth"
 import { createClient } from "@/lib/supabase/server"
+import { isNetworkError } from "@/lib/offline/cache"
 import { ULID_RE } from "@hopbites/shared/ulid"
 
 // "placed" is een geldige TERUG-transitie: de keuken kan een kaart weer
@@ -82,4 +83,53 @@ export async function bumpOrderAction(raw: unknown): Promise<BumpResult> {
     order_id: parsed.data.order_id,
     status: parsed.data.to_status,
   }
+}
+
+const RefundSchema = z.object({
+  order_id: z.string().uuid(),
+  reason: z.string().trim().min(3).max(200),
+})
+
+type RefundResult = { ok: true } | { ok: false; error: string }
+
+// Terugbetalen markeert de order als refunded + verzegelt een audit-event.
+// Het geld zelf gaat handmatig (cash uit de lade / PIN via de myPOS-app) —
+// dit is de administratieve kant. Manager-only.
+export async function refundOrderAction(raw: unknown): Promise<RefundResult> {
+  const claims = await requireRole("manager")
+  const venueClaims = await requireVenue()
+  const parsed = RefundSchema.safeParse(raw)
+  if (!parsed.success) return { ok: false, error: "validation" }
+
+  const supabase = await createClient()
+  const { data: order, error } = await supabase
+    .from("pos_orders")
+    .update({ status: "refunded", refunded_at: new Date().toISOString() })
+    .eq("id", parsed.data.order_id)
+    .eq("org_id", venueClaims.orgId)
+    .eq("venue_id", venueClaims.venueId)
+    .in("status", ["served", "voided"])
+    .select("id, total_incl_cents, ordered_label")
+    .maybeSingle()
+  if (error) {
+    if (isNetworkError(error)) return { ok: false, error: "offline" }
+    return { ok: false, error: "update_failed" }
+  }
+  if (!order) return { ok: false, error: "not_refundable" }
+
+  await supabase.rpc("write_audit_log", {
+    p_org_id: venueClaims.orgId,
+    p_venue_id: venueClaims.venueId,
+    p_actor_user_id: claims.userId,
+    p_actor_terminal_id: null,
+    p_event_type: "order.refunded",
+    p_payload: {
+      order_id: order.id,
+      ordered_label: order.ordered_label,
+      amount_cents: order.total_incl_cents,
+      reason: parsed.data.reason,
+      canonical_json_version: "2026-05-18-a",
+    },
+  })
+  return { ok: true }
 }
