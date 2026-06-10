@@ -34,6 +34,15 @@ function newPrinter(): ThermalPrinter {
   })
 }
 
+// ESC/POS drawer-kick via de bonprinter (pulse op de RJ11-poort). Wordt
+// gebruikt door de Lade-knop op de kassa en automatisch bij contant
+// afrekenen.
+export async function openCashDrawer(): Promise<void> {
+  const p = newPrinter()
+  p.openCashDrawer()
+  await p.execute()
+}
+
 export async function printKitchenBon(input: KitchenBonInput): Promise<void> {
   const p = newPrinter()
   p.alignCenter()

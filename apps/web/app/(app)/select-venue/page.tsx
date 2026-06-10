@@ -2,6 +2,7 @@ import { ChevronRight, Tent, Truck, Warehouse } from "lucide-react"
 import { requireAuth } from "@/lib/dal/auth"
 import { createClient } from "@/lib/supabase/server"
 import { selectVenueAction } from "./actions"
+import { AutoSelectVenue } from "./auto-select"
 
 type SearchParams = Promise<{ error?: string }>
 
@@ -43,6 +44,11 @@ export default async function SelectVenuePage({ searchParams }: { searchParams: 
           >
             {error === "invalid" ? "Geen toegang tot deze locatie." : error}
           </p>
+        ) : null}
+
+        {/* Eén locatie en geen foutmelding: direct doorkiezen. */}
+        {!error && venues?.length === 1 ? (
+          <AutoSelectVenue venueId={venues[0]!.id} />
         ) : null}
 
         <div className="flex flex-col gap-3.5">

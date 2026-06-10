@@ -3,6 +3,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react"
 import { ulid } from "ulid"
 import { Check } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
+import { openDrawerViaPi } from "@/lib/pi-bridge/client"
 import { cartReducer, initialCart, type CartState } from "@/lib/pos/cart-reducer"
 import { priceCart } from "@/lib/pos/pricing"
 import type { MenuItem, MenuSnapshot, ModifierGroup } from "@/lib/pos/types"
@@ -118,6 +119,9 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
   const [payMethod, setPayMethod] = useState<CheckoutMethod | "choose" | null>(null)
   const [splitOpen, setSplitOpen] = useState(false)
   const [noteFor, setNoteFor] = useState<"klant" | "notitie" | null>(null)
+  const [kortingOpen, setKortingOpen] = useState(false)
+  const [retourArmed, setRetourArmed] = useState(false)
+  const retourTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pickerFor, setPickerFor] = useState<MenuItem | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -161,9 +165,12 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
     setPendingQty("")
   }
 
-  const onKorting = () => {
-    setDiscountPct((d) => (d > 0 ? 0 : 10))
-    flash(discountPct > 0 ? "Korting verwijderd" : "10% korting toegepast")
+  const onKorting = () => setKortingOpen(true)
+
+  const applyKorting = (pct: number) => {
+    setDiscountPct(pct)
+    setKortingOpen(false)
+    flash(pct > 0 ? `${pct}% korting toegepast` : "Korting verwijderd")
   }
 
   const onHold = () => {
@@ -172,14 +179,30 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
     flash("Bon in de wacht gezet")
   }
 
+  // Twee-staps retour: een hele bon weggooien mag geen enkele mis-tik
+  // kosten. Eerste tik wapent (knop wordt "Zeker weten?"), tweede tik
+  // binnen 3s annuleert echt.
   const onRetour = () => {
+    if (!retourArmed) {
+      setRetourArmed(true)
+      if (retourTimer.current) clearTimeout(retourTimer.current)
+      retourTimer.current = setTimeout(() => setRetourArmed(false), 3000)
+      return
+    }
+    if (retourTimer.current) clearTimeout(retourTimer.current)
+    setRetourArmed(false)
     resetBon()
     flash("Bon geannuleerd")
   }
 
   const onUtility = (a: UtilityAction) => {
-    if (a === "lade") flash("Kassalade geopend")
-    else setNoteFor(a)
+    if (a === "lade") {
+      // Echte drawer-kick via de bonprinter — geen nep-toast.
+      void openDrawerViaPi().then((res) => {
+        if (res.ok && res.data.ok) flash("Kassalade geopend")
+        else flash("Lade niet bereikbaar — check de bonprinter")
+      })
+    } else setNoteFor(a)
   }
 
   // "In de wacht" on an empty bon resumes the most recently held bon.
@@ -243,6 +266,7 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
             canResumeHold={holds.length > 0}
             discountPct={discountPct}
             onKorting={onKorting}
+            retourArmed={retourArmed}
             onHold={empty ? onHoldKeyWithEmptyBon : onHold}
             onSplit={() => setSplitOpen(true)}
             onRetour={onRetour}
@@ -319,6 +343,50 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
           }}
           onCancel={() => setPickerFor(null)}
         />
+      ) : null}
+
+      {kortingOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Korting"
+          className="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(27,32,29,0.55)] p-6"
+          onClick={() => setKortingOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-[560px] max-w-full overflow-hidden rounded-xl border border-line-strong bg-paper p-7"
+          >
+            <div className="mb-5 text-[24px] font-extrabold leading-none text-charcoal-900">
+              Korting op de bon
+            </div>
+            <div className="mb-4 flex gap-2.5">
+              {[5, 10, 15, 20].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => applyKorting(pct)}
+                  className={`hb-tabular h-[72px] flex-1 rounded-md border text-[24px] font-extrabold leading-none ${
+                    discountPct === pct
+                      ? "border-charcoal-900 bg-charcoal-900 text-offwhite"
+                      : "border-line-strong bg-paper-bright text-charcoal-900 hover:bg-offwhite"
+                  }`}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+            {discountPct > 0 ? (
+              <button
+                type="button"
+                onClick={() => applyKorting(0)}
+                className="h-12 w-full rounded-md border border-brick-600/30 bg-brick-100 text-[16px] font-bold text-brick-600"
+              >
+                Korting verwijderen
+              </button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       {/* Toast: charcoal pill, bottom-center */}

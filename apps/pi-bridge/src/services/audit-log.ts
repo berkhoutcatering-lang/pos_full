@@ -29,6 +29,7 @@ export type AuditEventType =
   | "shift.closed"
   | "print.kitchen"
   | "print.customer"
+  | "drawer.opened"
 
 // Pinned canonical_json algorithm version. Bump in lockstep with
 // apps/web/lib/audit/canonical-json.ts CANONICAL_JSON_VERSION and the

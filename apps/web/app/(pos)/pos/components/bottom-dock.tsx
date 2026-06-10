@@ -23,6 +23,7 @@ export function BottomDock({
   canResumeHold = false,
   discountPct,
   onKorting,
+  retourArmed = false,
   onHold,
   onSplit,
   onRetour,
@@ -35,6 +36,7 @@ export function BottomDock({
   canResumeHold?: boolean
   discountPct: number
   onKorting: () => void
+  retourArmed?: boolean
   onHold: () => void
   onSplit: () => void
   onRetour: () => void
@@ -47,7 +49,7 @@ export function BottomDock({
       {/* FunctionGrid 2×2 */}
       <div className="grid w-[380px] flex-none grid-cols-2 grid-rows-2 gap-2.5">
         <FunctionButton
-          label="Korting"
+          label={discountPct > 0 ? `Korting ${discountPct}%` : "Korting"}
           icon={<Percent size={24} />}
           variant={discountPct > 0 ? "amber" : "neutral"}
           onClick={onKorting}
@@ -69,7 +71,7 @@ export function BottomDock({
           className="h-full w-full"
         />
         <FunctionButton
-          label="Retour"
+          label={retourArmed ? "Zeker weten?" : "Retour"}
           icon={<Undo2 size={24} />}
           variant="danger"
           onClick={onRetour}

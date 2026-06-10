@@ -6,6 +6,7 @@ import type { CartState } from "@/lib/pos/cart-reducer"
 import type { PricedCart } from "@/lib/pos/types"
 import { btwRateFor } from "@/lib/pos/btw"
 import {
+  openDrawerViaPi,
   placeOrderViaPi,
   printKitchenViaPi,
   printReceiptViaPi,
@@ -173,6 +174,9 @@ export function PaymentOverlay({
       setError(res.error)
       return
     }
+    // Contant betaald → lade automatisch open (fire-and-forget; zonder
+    // drawer-kick op de printer gebeurt er gewoon niets).
+    if (method === "cash") void openDrawerViaPi()
     setPaidMethod(method)
     setStep("done")
   }

@@ -124,6 +124,13 @@ export function printReceiptViaPi(payload: PrintReceiptPayload) {
   )
 }
 
+export function openDrawerViaPi() {
+  return call<{ ok: boolean; soft_error?: string }>("/print/drawer", {
+    method: "POST",
+    body: "{}",
+  })
+}
+
 // ---- /admin/operational/* Pi-bridge surface ----
 
 export interface StockUpdatePayload {

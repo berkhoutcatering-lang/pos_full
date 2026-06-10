@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { authenticateTablet } from "../middleware/auth-tablet.js"
-import { printKitchenBon, printCustomerBon } from "../services/printer.js"
+import { openCashDrawer, printKitchenBon, printCustomerBon } from "../services/printer.js"
 import { writeAuditEvent } from "../services/audit-log.js"
 import { checkAndMarkPrint } from "../db/outbox.js"
 import { ULID_RE } from "../utils/ulid.js"
@@ -45,6 +45,28 @@ const CustomerSchema = z.object({
 })
 
 export async function printRoutes(app: FastifyInstance) {
+  // Drawer-kick: geen idempotency nodig (een extra pulse is onschadelijk),
+  // wel een audit-event — lade-opens zijn kas-relevant.
+  app.post(
+    "/print/drawer",
+    { preHandler: authenticateTablet },
+    async (req, reply) => {
+      const claims = req.tabletClaims!
+      try {
+        await openCashDrawer()
+      } catch (err) {
+        return reply.send({ ok: false, soft_error: (err as Error).message })
+      }
+      await writeAuditEvent({
+        event_type: "drawer.opened",
+        payload: {},
+        actor_terminal_id: claims.terminal_id,
+        venue_id: claims.venue_id,
+      })
+      return reply.send({ ok: true })
+    },
+  )
+
   app.post(
     "/print/kitchen",
     { preHandler: authenticateTablet },
