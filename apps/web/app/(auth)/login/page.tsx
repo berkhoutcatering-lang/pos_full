@@ -9,7 +9,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
     <main className="grid min-h-dvh grid-cols-1 lg:grid-cols-2">
       {/* Brand panel */}
       <div className="hidden flex-col justify-between bg-charcoal-900 p-[88px] text-offwhite lg:flex">
-        <Logo size={64} eyebrow="BBQ · CATERING" />
+        <Logo h={120} />
         <div>
           <div className="max-w-[540px] text-[56px] font-extrabold leading-[1.05] tracking-[-0.02em]">
             Strak afrekenen,
@@ -32,9 +32,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
       {/* Form panel */}
       <div className="flex items-center justify-center bg-offwhite p-8 lg:p-[88px]">
         <form action={loginAction} className="w-[460px] max-w-full">
-          <div className="mb-8 inline-flex rounded-2xl bg-charcoal-900 p-3 lg:hidden">
-            <Logo size={48} eyebrow="BBQ · CATERING" />
-          </div>
+          <Logo h={64} className="mb-8 lg:hidden" />
           <h1 className="mb-1.5 text-[34px] font-extrabold leading-[1.1] text-charcoal-900">
             Inloggen
           </h1>

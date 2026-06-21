@@ -3,6 +3,7 @@ import { useState } from "react"
 import { Check } from "lucide-react"
 import { saveThemeAction } from "./actions"
 import { Button } from "@/components/ui/button"
+import { Logo } from "@/components/ui/logo"
 import { cn } from "@/lib/cn"
 
 // Accent swatch per preset — the preview re-tints with this color.
@@ -93,6 +94,14 @@ export function ThemeView({
             className="h-12 w-full rounded-md border border-line-strong bg-paper-bright px-3.5 text-[16px] font-semibold text-charcoal-900 outline-none"
           />
         </label>
+        <div className="mb-3.5 flex items-center gap-4 rounded-md border border-dashed border-line-strong p-[18px]">
+          <div className="rounded-lg bg-charcoal-900 px-4 py-2.5">
+            <Logo h={44} />
+          </div>
+          <div className="text-[14px] font-medium leading-[1.4] text-charcoal-500">
+            Huidig logo. Vul hieronder een URL in om het te vervangen.
+          </div>
+        </div>
         <label className="mb-5 block">
           <span className="mb-1.5 block text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
             Logo URL (optioneel)
@@ -121,17 +130,7 @@ export function ThemeView({
         </div>
         <div className="overflow-hidden rounded-lg border border-line">
           <div className="flex items-center justify-between bg-charcoal-900 px-5 py-4">
-            <span className="text-[20px] font-extrabold leading-none text-white">
-              {brandName.includes("&") ? (
-                <>
-                  {brandName.split("&")[0]}
-                  <span style={{ color: accent }}>&amp;</span>
-                  {brandName.split("&").slice(1).join("&")}
-                </>
-              ) : (
-                brandName
-              )}
-            </span>
+            <Logo h={30} />
             <span className="text-[11px] font-semibold uppercase leading-none tracking-[0.16em] text-charcoal-400">
               Live
             </span>

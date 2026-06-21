@@ -252,19 +252,28 @@ export function PosShell({ initialMenu, claims }: PosShellProps) {
       } else {
         publishDisplayState({
           kind: "cart",
-          lines: priced.items.map((it) => ({
-            name: it.menu_item.name,
-            qty: it.qty,
-            total_cents: it.line_incl_cents,
-          })),
+          lines: priced.items.map((it) => {
+            const sublabel = [
+              ...it.selected_modifiers.map((m) => m.name),
+              ...(it.note ? [it.note] : []),
+            ].join(" · ")
+            return {
+              name: it.menu_item.name,
+              qty: it.qty,
+              total_cents: it.line_incl_cents,
+              ...(sublabel ? { sublabel } : {}),
+            }
+          }),
+          subtotal_cents: priced.subtotal_cents,
+          discount_pct: discountPct,
           discount_cents: priced.discount_cents,
+          btw_cents: priced.total_btw_cents,
           total_cents: priced.total_incl_cents,
-          customer_name: cart.customer_name ?? null,
         })
       }
     }, 150)
     return () => clearTimeout(t)
-  }, [priced, cart.customer_name])
+  }, [priced, discountPct])
 
   return (
     <div className="relative flex h-dvh flex-col bg-offwhite">

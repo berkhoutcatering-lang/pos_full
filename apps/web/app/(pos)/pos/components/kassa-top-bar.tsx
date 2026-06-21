@@ -16,7 +16,7 @@ export function KassaTopBar() {
         >
           <LayoutGrid size={22} />
         </Link>
-        <Logo size={48} eyebrow="BBQ · CATERING" />
+        <Logo h={54} />
       </div>
 
       <span className="hidden h-11 items-center gap-2 rounded-md border border-charcoal-700 px-4 text-[16px] font-bold leading-none text-charcoal-300 md:inline-flex">

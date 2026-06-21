@@ -1,4 +1,5 @@
 import { ChevronRight, Tent, Truck, Warehouse } from "lucide-react"
+import { Logo } from "@/components/ui/logo"
 import { requireAuth } from "@/lib/dal/auth"
 import { createClient } from "@/lib/supabase/server"
 import { selectVenueAction } from "./actions"
@@ -27,9 +28,7 @@ export default async function SelectVenuePage({ searchParams }: { searchParams: 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-offwhite p-8 lg:p-20">
       <div className="w-[720px] max-w-full">
-        <div className="mb-3.5 text-[13px] font-bold uppercase leading-none tracking-[0.18em] text-hop-700">
-          Hop &amp; Bites
-        </div>
+        <Logo h={76} className="mb-[26px]" />
         <h1 className="mb-2 text-[44px] font-extrabold leading-[1.05] tracking-[-0.02em] text-charcoal-900">
           Kies je locatie
         </h1>

@@ -12,11 +12,11 @@ export default async function CfdPage() {
     orgId: claims.orgId,
     venueId: claims.venueId,
   })
-  // Strip PII before sending to the client display.
+  // Strip PII before sending to the client display — nummers only, dus
+  // ook geen klantnaam meer richting het muurscherm.
   const stripped = initial.map((o) => ({
     id: o.id,
     ordered_label: o.ordered_label,
-    customer_name: o.customer_name,
     status: o.status,
     placed_at: o.placed_at,
     prepared_at: o.prepared_at,

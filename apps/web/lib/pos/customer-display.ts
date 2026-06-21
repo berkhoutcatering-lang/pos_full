@@ -10,14 +10,26 @@
 const PI_BASE = process.env.NEXT_PUBLIC_PI_BRIDGE_URL ?? "https://hopbites.local:3001"
 const CHANNEL = "hb-klantdisplay"
 
+// Klantschermen tonen nummers, nooit klantnamen — dus de naam reist hier
+// bewust niet mee.
 export type CustomerDisplayState =
   | { kind: "idle" }
   | {
       kind: "cart"
-      lines: Array<{ name: string; qty: number; total_cents: number }>
+      lines: Array<{
+        name: string
+        qty: number
+        total_cents: number
+        /** Modifiers/notitie onder de regel, bv. "Extra kaas · zonder ui". */
+        sublabel?: string
+      }>
+      subtotal_cents: number
+      discount_pct: number
       discount_cents: number
+      btw_cents: number
       total_cents: number
-      customer_name: string | null
+      /** Bonnummer zodra bekend (pas na afrekenen — dan meestal al "paid"). */
+      order_no?: string | null
     }
   | { kind: "paid"; queue_label: string | null; total_cents: number }
 

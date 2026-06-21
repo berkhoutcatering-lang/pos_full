@@ -75,7 +75,13 @@ export default async function HomePage() {
   return (
     <main className="flex min-h-dvh flex-col bg-offwhite">
       <header className="flex h-24 flex-none items-center justify-between bg-charcoal-900 px-12">
-        <Logo size={52} eyebrow={(venue?.name ?? "Hop & Bites").toUpperCase()} />
+        <div className="flex items-center gap-[18px]">
+          <Logo h={58} />
+          <div className="h-10 w-px bg-charcoal-700" />
+          <div className="text-[13px] font-semibold uppercase leading-none tracking-[0.16em] text-charcoal-400">
+            {(venue?.name ?? "Foodtruck").toUpperCase()}
+          </div>
+        </div>
         <form action={logoutAction}>
           <button
             type="submit"

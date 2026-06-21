@@ -53,8 +53,11 @@ export function AdminSidebar() {
 
   return (
     <aside className="flex flex-col overflow-y-auto bg-charcoal-900 px-3.5 py-5 text-offwhite">
-      <div className="px-2 pb-[18px]">
-        <Logo size={44} eyebrow="BEHEER" />
+      <div className="flex items-center gap-3.5 px-2 pb-[18px]">
+        <Logo h={44} />
+        <span className="text-[11px] font-bold uppercase leading-none tracking-[0.14em] text-charcoal-400">
+          Beheer
+        </span>
       </div>
 
       <nav className="flex flex-col gap-0.5">
