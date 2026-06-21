@@ -1,12 +1,13 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import { BellRing, Check, Flame, ShoppingBag } from "lucide-react"
+import { BellRing, Check, Flame } from "lucide-react"
+import { Logo } from "@/components/ui/logo"
 import { subscribeToVenueOrders } from "@/lib/pos/realtime-subscribe"
+import { getOrderStatusVisual } from "@/lib/pos/order-status-visuals"
 
 interface CfdOrder {
   id: string
   ordered_label: string | null
-  customer_name: string | null
   status: "placed" | "preparing" | "ready"
   placed_at: string
   prepared_at: string | null
@@ -109,7 +110,6 @@ export function CfdShell({
         const stripped: CfdOrder = {
           id: row.id,
           ordered_label: row.ordered_label,
-          customer_name: row.customer_name,
           status: row.status,
           placed_at: row.placed_at,
           prepared_at: row.prepared_at,
@@ -143,46 +143,71 @@ export function CfdShell({
     hour: "2-digit",
     minute: "2-digit",
   })
-  const tag = (o: CfdOrder) => o.customer_name ?? o.ordered_label ?? "#"
+  // Privacy op het muurscherm: altijd het bestelnummer, nooit de klantnaam.
+  const tag = (o: CfdOrder) => o.ordered_label ?? "#"
+  const preparingVisual = getOrderStatusVisual("preparing", "sun")
+  const readyVisual = getOrderStatusVisual("ready", "sun")
 
   return (
-    <div className="flex h-dvh flex-col bg-charcoal-900 text-offwhite" data-testid="cfd">
-      {/* 110px header */}
-      <header className="flex h-[110px] flex-none items-center justify-between border-b border-charcoal-700 px-14">
-        <div className="whitespace-nowrap text-[34px] font-extrabold leading-[1.1] tracking-[-0.01em]">
-          Hop <span className="text-hop-500">&amp;</span> Bites
-        </div>
-        <div className="hidden text-[16px] font-bold uppercase leading-none tracking-[0.22em] text-charcoal-400 md:block">
+    <div
+      className="relative flex h-dvh flex-col overflow-hidden bg-charcoal-900 text-offwhite"
+      data-testid="cfd"
+    >
+      {/* Logo-watermerk, gecentreerd achter alle content */}
+      <Logo
+        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-5"
+        style={{ height: "min(680px, 75vh)" }}
+      />
+
+      {/* 110px header: eyebrow gecentreerd, klok rechts — verder niets */}
+      <header className="relative flex h-[110px] flex-none items-center justify-center border-b border-charcoal-700 px-14">
+        <div className="whitespace-nowrap text-[16px] font-bold uppercase leading-none tracking-[0.22em] text-charcoal-400">
           Jouw bestelling · Live
         </div>
-        <div className="hb-tabular text-[36px] font-extrabold leading-none">{clock}</div>
+        <div className="hb-tabular absolute right-14 text-[36px] font-extrabold leading-none">
+          {clock}
+        </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
+      <div className="relative grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
         {/* In bereiding */}
         <section className="flex min-h-0 flex-col border-b border-charcoal-700 p-8 md:border-b-0 md:border-r md:p-12">
-          <h2 className="mb-9 flex items-center gap-4 whitespace-nowrap text-[44px] font-extrabold leading-[1.1] tracking-[-0.01em]">
-            <Flame size={40} className="text-amber-600" /> In bereiding
-          </h2>
+          <div
+            className="mb-8 flex min-h-[86px] items-center justify-center gap-4 rounded-lg border px-6"
+            style={{
+              borderColor: preparingVisual.border,
+              background: preparingVisual.accent,
+              color: preparingVisual.foreground,
+            }}
+          >
+            <Flame size={40} strokeWidth={3} />
+            <h2 className="whitespace-nowrap text-[36px] font-extrabold leading-none md:text-[44px]">
+              In bereiding
+            </h2>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid grid-cols-2 content-start gap-[18px] lg:grid-cols-3">
+            <div className="flex flex-wrap content-start justify-center gap-[18px]">
               {preparing.length === 0 ? (
-                <p className="col-span-full text-[26px] font-semibold text-charcoal-400">
+                <p className="w-full text-center text-[26px] font-semibold text-charcoal-400">
                   —
                 </p>
               ) : (
                 preparing.map((o) => (
                   <div
                     key={o.id}
-                    className="flex min-h-[132px] flex-col items-center justify-center gap-2 rounded-lg border border-charcoal-700 bg-charcoal-800 p-[18px]"
+                    className="flex min-h-[132px] w-[270px] max-w-full flex-col items-center justify-center gap-2 rounded-lg border border-charcoal-700 bg-charcoal-800 p-[18px]"
                   >
                     <span className="hb-tabular text-center text-[38px] font-extrabold leading-none">
                       {tag(o)}
                     </span>
                     <span
-                      className={`text-[15px] font-semibold leading-none ${
-                        o.status === "preparing" ? "text-amber-600" : "text-charcoal-400"
-                      }`}
+                      className="text-[15px] font-semibold leading-none"
+                      style={{
+                        color:
+                          o.status === "preparing"
+                            ? preparingVisual.accent
+                            : "var(--color-charcoal-400)",
+                      }}
                     >
                       {o.status === "preparing" ? "Op de grill" : "In de wacht"}
                     </span>
@@ -195,25 +220,38 @@ export function CfdShell({
 
         {/* Klaar */}
         <section className="flex min-h-0 flex-col p-8 md:p-12">
-          <h2 className="mb-9 flex items-center gap-4 whitespace-nowrap text-[44px] font-extrabold leading-[1.1] tracking-[-0.01em] text-hop-500">
-            <BellRing size={40} /> Klaar — kom afhalen!
-          </h2>
+          <div
+            className="mb-8 flex min-h-[86px] items-center justify-center gap-4 rounded-lg border bg-paper-bright px-6 text-charcoal-900"
+            style={{ borderColor: readyVisual.border }}
+          >
+            <BellRing size={42} style={{ color: readyVisual.accent }} strokeWidth={3} />
+            <span
+              className="rounded-md px-4 py-2 text-[26px] font-black leading-none text-white md:text-[30px]"
+              style={{ background: readyVisual.accent, color: readyVisual.foreground }}
+            >
+              Klaar
+            </span>
+            <h2 className="whitespace-nowrap text-[32px] font-extrabold leading-none md:text-[40px]">
+              Kom afhalen
+            </h2>
+          </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid grid-cols-1 content-start gap-[18px] lg:grid-cols-2">
+            <div className="flex flex-wrap content-start justify-center gap-[18px]">
               {ready.length === 0 ? (
-                <p className="col-span-full text-[26px] font-semibold text-charcoal-400">
+                <p className="w-full text-center text-[26px] font-semibold text-charcoal-400">
                   —
                 </p>
               ) : (
                 ready.map((o) => (
                   <div
                     key={o.id}
-                    className="hb-pulse flex min-h-[156px] flex-col items-center justify-center gap-2 rounded-xl bg-hop-600 p-[22px] text-white"
+                    className="hb-pulse flex min-h-[168px] w-[440px] max-w-full flex-col items-center justify-center gap-2 rounded-xl p-[22px]"
+                    style={{ background: readyVisual.accent, color: readyVisual.foreground }}
                   >
-                    <span className="hb-tabular text-center text-[52px] font-black leading-none tracking-[-0.01em]">
+                    <span className="hb-tabular text-center text-[60px] font-black leading-none">
                       {tag(o)}
                     </span>
-                    <span className="inline-flex items-center gap-2 text-[18px] font-bold leading-none text-white/90">
+                    <span className="inline-flex items-center gap-2 text-[20px] font-bold leading-none text-white/90">
                       <Check size={20} strokeWidth={3} /> Klaar
                     </span>
                   </div>
@@ -223,11 +261,6 @@ export function CfdShell({
           </div>
         </section>
       </div>
-
-      <footer className="flex h-16 flex-none items-center justify-center gap-3 whitespace-nowrap border-t border-charcoal-700 text-[17px] font-semibold leading-none text-charcoal-300">
-        <ShoppingBag size={18} className="text-charcoal-400" /> Bedankt &amp; eet
-        smakelijk — Hop &amp; Bites BBQ
-      </footer>
     </div>
   )
 }

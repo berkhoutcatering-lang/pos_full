@@ -8,16 +8,19 @@ import {
   CheckCheck,
   ChefHat,
   Flame,
+  GripVertical,
   HandPlatter,
   History,
   Inbox,
   LayoutGrid,
   Play,
   Settings2,
+  Sun,
 } from "lucide-react"
 import { ulid } from "ulid"
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   useDraggable,
   useDroppable,
@@ -30,6 +33,12 @@ import { updateOrderStateViaPi } from "@/lib/pi-bridge/client"
 import { useConnectionStatus } from "@/lib/pos/connection-status"
 import { bumpOrderAction } from "../actions"
 import type { ActiveOrder } from "@/lib/dal/active-orders"
+import {
+  ORDER_STATUS_VISUALS,
+  type OrderStatus,
+  type OrderStatusContrast,
+  type OrderStatusVisual,
+} from "@/lib/pos/order-status-visuals"
 import { OrderCard } from "./order-card"
 import { StationFilter } from "./station-filter"
 import { ConnectionChip } from "@/components/connection-chip"
@@ -46,7 +55,7 @@ const STATION_LABELS: Record<string, string> = {
 }
 const STATION_ORDER = ["grill", "fryer", "cold", "bar"]
 
-type LaneStatus = "placed" | "preparing" | "ready"
+type LaneStatus = OrderStatus
 type BumpTarget = LaneStatus | "served"
 
 // ---- KDS-voorkeuren (lokaal per scherm) --------------------------------
@@ -54,11 +63,13 @@ type BumpTarget = LaneStatus | "served"
 interface KdsPrefs {
   cols: Record<LaneStatus, 1 | 2>
   scale: "s" | "m" | "l"
+  contrast: OrderStatusContrast
 }
 
 const DEFAULT_PREFS: KdsPrefs = {
   cols: { placed: 1, preparing: 1, ready: 1 },
   scale: "m",
+  contrast: "normal",
 }
 
 // Kaarten gebruiken vaste Tailwind-groottes; zoom schaalt de hele kaart
@@ -73,6 +84,7 @@ function loadPrefs(): KdsPrefs {
     return {
       cols: { ...DEFAULT_PREFS.cols, ...(parsed.cols ?? {}) },
       scale: parsed.scale ?? "m",
+      contrast: parsed.contrast ?? "normal",
     }
   } catch {
     return DEFAULT_PREFS
@@ -99,6 +111,8 @@ export function KdsShell({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  const [activeDragId, setActiveDragId] = useState<string | null>(null)
+  const [activeDragWidth, setActiveDragWidth] = useState<number | null>(null)
 
   useEffect(() => {
     setPrefs(loadPrefs())
@@ -340,6 +354,8 @@ export function KdsShell({
   )
   const onDragEnd = useCallback(
     (e: DragEndEvent) => {
+      setActiveDragId(null)
+      setActiveDragWidth(null)
       const orderId = String(e.active.id)
       const target = e.over?.id as LaneStatus | undefined
       if (!target) return
@@ -388,6 +404,14 @@ export function KdsShell({
     }),
     [visible],
   )
+  const activeDragOrder = useMemo(
+    () => visible.find((o) => o.id === activeDragId) ?? null,
+    [visible, activeDragId],
+  )
+  const activeDragAction = activeDragOrder
+    ? getLaneAction(activeDragOrder.status)
+    : null
+  const laneVisuals = ORDER_STATUS_VISUALS[prefs.contrast]
 
   return (
     <div className="flex h-dvh flex-col bg-offwhite">
@@ -454,13 +478,24 @@ export function KdsShell({
       </div>
 
       {/* Three status lanes — kaarten zijn sleepbaar tussen de lanes */}
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={(e) => {
+          setActiveDragId(String(e.active.id))
+          setActiveDragWidth(e.active.rect.current.initial?.width ?? null)
+        }}
+        onDragCancel={() => {
+          setActiveDragId(null)
+          setActiveDragWidth(null)
+        }}
+        onDragEnd={onDragEnd}
+      >
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 md:grid-cols-3">
           <Column
             id="placed"
             title="Geplaatst"
-            icon={<Inbox size={20} className="text-charcoal-700" />}
-            accent="var(--color-charcoal-500)"
+            icon={<Inbox size={20} />}
+            visual={laneVisuals.placed}
             orders={columns.placed}
             onBump={handleBump}
             nextStatus="preparing"
@@ -472,8 +507,8 @@ export function KdsShell({
           <Column
             id="preparing"
             title="In bereiding"
-            icon={<Flame size={20} className="text-charcoal-700" />}
-            accent="var(--color-amber-600)"
+            icon={<Flame size={20} />}
+            visual={laneVisuals.preparing}
             orders={columns.preparing}
             onBump={handleBump}
             nextStatus="ready"
@@ -485,8 +520,8 @@ export function KdsShell({
           <Column
             id="ready"
             title="Klaar"
-            icon={<HandPlatter size={20} className="text-charcoal-700" />}
-            accent="var(--color-hop-600)"
+            icon={<HandPlatter size={20} />}
+            visual={laneVisuals.ready}
             orders={columns.ready}
             onBump={handleBump}
             nextStatus="served"
@@ -496,6 +531,23 @@ export function KdsShell({
             zoom={SCALE_ZOOM[prefs.scale]}
           />
         </div>
+        <DragOverlay dropAnimation={null} zIndex={1000}>
+          {activeDragOrder && activeDragAction ? (
+            <div
+              className="max-w-[calc(100vw-48px)] rotate-[0.5deg] shadow-2xl"
+              style={{ width: activeDragWidth ?? undefined }}
+            >
+              <OrderCard
+                order={activeDragOrder}
+                accent={laneVisuals[activeDragOrder.status].accent}
+                foreground={laneVisuals[activeDragOrder.status].foreground}
+                onBump={() => {}}
+                nextLabel={activeDragAction.label}
+                nextIcon={activeDragAction.icon}
+              />
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
 
       <HistoryPanel
@@ -506,6 +558,12 @@ export function KdsShell({
       />
     </div>
   )
+}
+
+function getLaneAction(status: LaneStatus): { label: string; icon: React.ReactNode } {
+  if (status === "placed") return { label: "Start bereiding", icon: <Play size={22} /> }
+  if (status === "preparing") return { label: "Klaar", icon: <Check size={22} /> }
+  return { label: "Uitgegeven", icon: <HandPlatter size={22} /> }
 }
 
 // ---- weergave-instellingen ---------------------------------------------
@@ -525,6 +583,27 @@ function SettingsPopover({
   return (
     <div className="absolute right-0 top-[52px] z-50 w-[290px] rounded-lg border border-line-strong bg-paper-bright p-4 text-charcoal-900 shadow-xl">
       <div className="mb-3 text-[14px] font-extrabold leading-none">Weergave</div>
+
+      <div className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
+        Contrast
+      </div>
+      <button
+        type="button"
+        aria-pressed={prefs.contrast === "sun"}
+        onClick={() =>
+          onChange({
+            ...prefs,
+            contrast: prefs.contrast === "sun" ? "normal" : "sun",
+          })
+        }
+        className={`mb-3 flex h-11 w-full items-center justify-center gap-2 rounded-md border text-[14px] font-extrabold leading-none ${
+          prefs.contrast === "sun"
+            ? "border-[#92400E] bg-[#F59E0B] text-charcoal-900"
+            : "border-line-strong bg-paper text-charcoal-700"
+        }`}
+      >
+        <Sun size={18} /> Zonmodus
+      </button>
 
       <div className="mb-1.5 text-[12px] font-bold uppercase tracking-[0.04em] text-charcoal-500">
         Kaarten per kolom
@@ -570,10 +649,6 @@ function SettingsPopover({
           </button>
         ))}
       </div>
-      <p className="mt-3 text-[12px] font-medium leading-[1.4] text-charcoal-500">
-        Tip: houd een kaart even vast om hem naar een andere kolom te slepen —
-        ook terug.
-      </p>
     </div>
   )
 }
@@ -584,7 +659,7 @@ function Column({
   id,
   title,
   icon,
-  accent,
+  visual,
   orders,
   onBump,
   nextStatus,
@@ -596,7 +671,7 @@ function Column({
   id: LaneStatus
   title: string
   icon: React.ReactNode
-  accent: string
+  visual: OrderStatusVisual
   orders: ActiveOrder[]
   onBump: (id: string, to: BumpTarget) => void
   nextStatus: BumpTarget
@@ -609,18 +684,30 @@ function Column({
   return (
     <section
       ref={setNodeRef}
-      className={`flex min-h-0 flex-col overflow-hidden rounded-lg border bg-paper transition-colors ${
-        isOver ? "border-hop-600 bg-hop-600/5" : "border-line"
+      className={`flex min-h-0 flex-col overflow-hidden rounded-lg border border-t-[6px] bg-paper transition-colors ${
+        isOver ? "" : "border-line"
       }`}
+      style={{
+        borderTopColor: visual.accent,
+        ...(isOver ? { borderColor: visual.border, background: visual.soft } : {}),
+      }}
     >
-      <h2 className="flex flex-none items-center gap-2.5 border-b border-line px-[18px] py-3.5 text-[18px] font-extrabold leading-[1.1] tracking-[0.02em] text-charcoal-900">
+      <h2
+        className="flex flex-none items-center gap-2.5 border-b border-line px-[18px] py-3.5 text-[18px] font-extrabold leading-[1.1] text-charcoal-900"
+        style={{ background: visual.soft }}
+      >
         <span
           className="h-3 w-3 flex-none rounded-[3px]"
-          style={{ background: accent }}
+          style={{ background: visual.accent }}
         />
-        {icon}
+        <span className="flex-none" style={{ color: visual.accent }}>
+          {icon}
+        </span>
         <span className="whitespace-nowrap">{title}</span>
-        <span className="hb-tabular ml-auto text-[16px] font-extrabold leading-none text-charcoal-500">
+        <span
+          className="hb-tabular ml-auto inline-flex h-9 min-w-12 items-center justify-center rounded-md px-3 text-[20px] font-extrabold leading-none"
+          style={{ background: visual.accent, color: visual.foreground }}
+        >
           {orders.length}
         </span>
       </h2>
@@ -638,13 +725,30 @@ function Column({
         ) : (
           orders.map((o) => (
             <DraggableCard key={o.id} id={o.id}>
-              <OrderCard
-                order={o}
-                accent={accent}
-                onBump={() => onBump(o.id, nextStatus)}
-                nextLabel={nextLabel}
-                nextIcon={nextIcon}
-              />
+              {({ attributes, listeners, isDragging }) => (
+                <OrderCard
+                  order={o}
+                  accent={visual.accent}
+                  foreground={visual.foreground}
+                  onBump={() => onBump(o.id, nextStatus)}
+                  nextLabel={nextLabel}
+                  nextIcon={nextIcon}
+                  dragHandle={
+                    <button
+                      type="button"
+                      title="Slepen"
+                      aria-label={`Sleep ${o.ordered_label ?? "bon"}`}
+                      className={`flex h-10 w-10 flex-none touch-none items-center justify-center rounded-md border border-line-strong bg-paper text-charcoal-500 ${
+                        isDragging ? "cursor-grabbing" : "cursor-grab"
+                      }`}
+                      {...listeners}
+                      {...attributes}
+                    >
+                      <GripVertical size={20} />
+                    </button>
+                  }
+                />
+              )}
             </DraggableCard>
           ))
         )}
@@ -653,21 +757,29 @@ function Column({
   )
 }
 
-function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
+function DraggableCard({
+  id,
+  children,
+}: {
+  id: string
+  children: (args: {
+    attributes: ReturnType<typeof useDraggable>["attributes"]
+    listeners: ReturnType<typeof useDraggable>["listeners"]
+    isDragging: boolean
+  }) => React.ReactNode
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id })
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      className={isDragging ? "relative z-40 cursor-grabbing opacity-90" : "touch-manipulation"}
+      className={isDragging ? "relative z-10 cursor-grabbing opacity-25" : "touch-manipulation"}
       style={
-        transform
+        transform && !isDragging
           ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
           : undefined
       }
     >
-      {children}
+      {children({ attributes, listeners, isDragging })}
     </div>
   )
 }

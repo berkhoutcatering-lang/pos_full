@@ -13,6 +13,8 @@ export function OrderCard({
   nextLabel,
   nextIcon,
   accent,
+  foreground = "#FFFFFF",
+  dragHandle,
 }: {
   order: ActiveOrder
   onBump: () => void
@@ -20,6 +22,8 @@ export function OrderCard({
   nextIcon?: React.ReactNode
   /** Column status color (CSS value) for stripe + bump button. */
   accent: string
+  foreground?: string
+  dragHandle?: React.ReactNode
 }) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -36,7 +40,7 @@ export function OrderCard({
       style={{ borderLeft: `6px solid ${accent}` }}
       data-test="order-card"
     >
-      <header className="flex items-center justify-between border-b border-line px-4 py-3">
+      <header className="flex items-center gap-3 border-b border-line px-4 py-3">
         <div className="flex items-baseline gap-2.5">
           <span className="hb-tabular text-[24px] font-extrabold leading-none text-charcoal-900">
             {order.ordered_label ?? "#"}
@@ -47,14 +51,17 @@ export function OrderCard({
             </span>
           ) : null}
         </div>
-        <span
-          className={cn(
-            "hb-tabular inline-flex items-center gap-1.5 text-[16px] font-extrabold leading-none",
-            AGE_TEXT_CLASSES[bucket]
-          )}
-        >
-          <Clock size={15} /> {ageText}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span
+            className={cn(
+              "hb-tabular inline-flex items-center gap-1.5 text-[16px] font-extrabold leading-none",
+              AGE_TEXT_CLASSES[bucket],
+            )}
+          >
+            <Clock size={15} /> {ageText}
+          </span>
+          {dragHandle}
+        </div>
       </header>
 
       <div className="flex flex-col gap-2.5 px-4 py-3">
@@ -90,8 +97,8 @@ export function OrderCard({
       <button
         type="button"
         onClick={onBump}
-        className="m-3 mt-1 flex h-16 items-center justify-center gap-2.5 rounded-md text-[18px] font-extrabold leading-none text-white transition-transform duration-[var(--dur-fast)] active:scale-[0.98]"
-        style={{ background: accent }}
+        className="m-3 mt-1 flex h-16 items-center justify-center gap-2.5 rounded-md text-[18px] font-extrabold leading-none transition-transform duration-[var(--dur-fast)] active:scale-[0.98]"
+        style={{ background: accent, color: foreground }}
       >
         {nextIcon} {nextLabel}
       </button>

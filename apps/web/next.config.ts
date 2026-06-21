@@ -50,6 +50,8 @@ const CSP_DIRECTIVES = [
 // local node process behind nginx, no Vercel. Image optimization is off
 // there (no sharp on the appliance; menu images are remote anyway).
 const isPiBuild = process.env.POS_PI_BUILD === "1"
+const appDir = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(appDir, "../..")
 
 const nextConfig: NextConfig = {
   // NOTE: cacheComponents is intentionally OFF. The app renders every
@@ -59,16 +61,16 @@ const nextConfig: NextConfig = {
   // and risks caching one tenant's data for another. Revisit only with a
   // deliberate, per-tenant-keyed caching design.
   typedRoutes: true,
+  turbopack: {
+    root: repoRoot,
+  },
   // Pin the tracing root to the monorepo root so the standalone bundle
   // always lands at .next/standalone/apps/web/server.js — the pi-gen
   // stage and pos-web.service depend on that exact layout.
   ...(isPiBuild
     ? {
         output: "standalone" as const,
-        outputFileTracingRoot: path.resolve(
-          path.dirname(fileURLToPath(import.meta.url)),
-          "../..",
-        ),
+        outputFileTracingRoot: repoRoot,
       }
     : {}),
   images: {
