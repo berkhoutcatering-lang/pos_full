@@ -33,6 +33,9 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-test-service-role}
       PI_BRIDGE_PAIRING_SECRET: ${PI_BRIDGE_PAIRING_SECRET:-test-pairing-secret-min-32-chars-long}
       PI_BRIDGE_ADMIN_TOKEN: ${PI_BRIDGE_ADMIN_TOKEN:-test-admin-token-min-32-chars-long-xx}
+      # Integration tests drive the cloud transport against a MockServer; the
+      # LAN/ECR transport has its own unit tests in src/services/mypos-ecr.spec.ts.
+      MYPOS_TRANSPORT: cloud
       MYPOS_BASE: http://mock-mypos:1080
       MYPOS_SESSION_SECRET: test-mypos-session
       MYPOS_PARTNER_ID: test-partner

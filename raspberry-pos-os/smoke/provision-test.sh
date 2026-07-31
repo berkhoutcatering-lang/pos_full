@@ -56,7 +56,12 @@ bash /work/files/pos-provision.sh || fail "provision exited non-zero"
 [ -f /run/pos/config-invalid ] && fail "config marked invalid for a valid pos.env"
 grep -q '^ORG_ID=3f6f7bfd' /etc/pi-bridge/env || fail "ORG_ID missing from bridge env"
 grep -q '^NODE_ENV=production' /etc/pi-bridge/env || fail "NODE_ENV missing"
-grep -q '^MYPOS_SESSION_SECRET=unset' /etc/pi-bridge/env || fail "myPOS placeholder missing"
+# PIN uit: transport 'off' en géén myPOS-sleutels in de bridge-env. Vroeger
+# stond hier de placeholder MYPOS_SESSION_SECRET=unset om een verplicht
+# zod-veld te vullen; de bridge valideert nu per transport en start zonder.
+grep -q '^MYPOS_TRANSPORT=off' /etc/pi-bridge/env || fail "myPOS transport not off by default"
+grep -q '^MYPOS_SESSION_SECRET=' /etc/pi-bridge/env && fail "myPOS cloud key written while transport is off"
+grep -q '^MYPOS_API_SECRET=' /etc/pi-bridge/env && fail "myPOS ecr key written while transport is off"
 grep -Eq '^PI_BRIDGE_PAIRING_SECRET=[0-9a-f]{64}$' /etc/pi-bridge/env || fail "pairing secret not generated"
 grep -q $'\r' /etc/pi-bridge/env && fail "CRLF leaked into bridge env"
 grep -q '^ALLOWED_ORIGINS=https://hopbites.local' /etc/pi-bridge/env || fail "local web origin not in ALLOWED_ORIGINS"
@@ -125,6 +130,31 @@ sed -i 's/AP_PASS=foodtruck2026/AP_PASS=kort/' /boot/firmware/pos-setup/pos.env
 bash /work/files/pos-provision.sh || fail "provision crashed on short AP_PASS"
 [ -f /run/pos/config-invalid ] || fail "short AP_PASS not flagged invalid"
 sed -i 's/AP_PASS=kort/AP_PASS=foodtruck2026/' /boot/firmware/pos-setup/pos.env
+
+# --- Case 3b: complete ECR config activates the LAN transport ---
+# pos.env staat hier al in CRLF (Case 1), dus matchen tot einde regel en de \r
+# zelf terugzetten — anders matcht een anker op '=$' niet.
+sed -i -e 's/^MYPOS_TRANSPORT=.*/MYPOS_TRANSPORT=ecr\r/' \
+       -e 's/^MYPOS_ECR_HOST=.*/MYPOS_ECR_HOST=10.42.0.5\r/' \
+       -e 's/^MYPOS_API_KEY=.*/MYPOS_API_KEY=klantnummer-123\r/' \
+       -e 's/^MYPOS_API_SECRET=.*/MYPOS_API_SECRET=klantgeheim-456\r/' \
+       -e 's/^MYPOS_TID=.*/MYPOS_TID=80303466\r/' \
+       /boot/firmware/pos-setup/pos.env
+bash /work/files/pos-provision.sh || fail "provision crashed on ecr config"
+[ -f /run/pos/config-invalid ] && fail "valid ecr config marked invalid"
+grep -q '^MYPOS_TRANSPORT=ecr' /etc/pi-bridge/env || fail "ecr transport not written"
+grep -q '^MYPOS_ECR_HOST=10.42.0.5' /etc/pi-bridge/env || fail "ecr host not written"
+grep -q '^MYPOS_ECR_PORT=7900' /etc/pi-bridge/env || fail "ecr port not written"
+grep -q '^MYPOS_TID=80303466' /etc/pi-bridge/env || fail "ecr tid not written"
+grep -q '^MYPOS_SESSION_SECRET=' /etc/pi-bridge/env && fail "cloud key leaked into ecr config"
+
+# --- Case 3c: incomplete ECR config falls back to off instead of crashing ---
+# The bridge must still boot; PIN is the only thing that goes away.
+sed -i 's/^MYPOS_API_SECRET=.*/MYPOS_API_SECRET=\r/' /boot/firmware/pos-setup/pos.env
+bash /work/files/pos-provision.sh || fail "provision crashed on incomplete ecr config"
+[ -f /run/pos/config-invalid ] && fail "incomplete myPOS should warn, not invalidate the whole config"
+grep -q '^MYPOS_TRANSPORT=off' /etc/pi-bridge/env || fail "incomplete ecr config did not fall back to off"
+grep -q 'MYPOS_API_SECRET' /boot/firmware/pos-setup/STATUS.txt || fail "incomplete myPOS not reported in STATUS.txt"
 
 # --- Case 4: invalid (empty) pos.env blocks pi-bridge + web ---
 cp /usr/share/pos/pos.env.template /boot/firmware/pos-setup/pos.env

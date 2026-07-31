@@ -51,8 +51,12 @@ chmod 600 "${CLEAN}"
 # Defaults, then user values.
 ORG_ID="" VENUE_ID="" SUPABASE_URL="" SUPABASE_SERVICE_ROLE_KEY=""
 SUPABASE_ANON_KEY="" ANTHROPIC_API_KEY=""
-MYPOS_SESSION_SECRET="" MYPOS_PARTNER_ID="" MYPOS_APP_ID=""
-MYPOS_BASE="https://eposapi.mypos.com"
+MYPOS_TRANSPORT="off"
+MYPOS_GATEWAY_URL="https://api-gateway.mypos.com"
+MYPOS_PARTNER_ID="" MYPOS_APPLICATION_ID=""
+MYPOS_INTEGRATION_CLIENT_ID="" MYPOS_INTEGRATION_CLIENT_SECRET=""
+MYPOS_MERCHANT_CLIENT_ID="" MYPOS_MERCHANT_CLIENT_SECRET=""
+MYPOS_TID="" MYPOS_OPERATOR_CODE="1"
 PRINTER_NETWORK_ADDR="192.168.1.50" PRINTER_TYPE="star"
 POS_HOSTNAME="hopbites" WIFI_SSID="" WIFI_PASS="" WIFI_COUNTRY="NL"
 AP_SSID="" AP_PASS="" AP_BAND="bg" AP_CHANNEL="6" AP_IP="10.42.0.1"
@@ -210,11 +214,33 @@ UUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F
 [ "${#SUPABASE_SERVICE_ROLE_KEY}" -ge 20 ] || ERRORS+=("SUPABASE_SERVICE_ROLE_KEY ontbreekt of is te kort")
 [ "${#SUPABASE_ANON_KEY}" -ge 20 ] || ERRORS+=("SUPABASE_ANON_KEY ontbreekt of is te kort (nodig voor de lokale web-app)")
 
-MYPOS_OK=1
-if [ -z "${MYPOS_SESSION_SECRET}" ] || [ -z "${MYPOS_PARTNER_ID}" ] || [ -z "${MYPOS_APP_ID}" ]; then
-  MYPOS_OK=0
-  WARNINGS+=("myPOS niet (volledig) ingevuld — PIN-betalingen werken pas na invullen van MYPOS_* in pos.env.")
-fi
+# myPOS: valideer per transport. Ontbreekt er iets, dan zetten we PIN terug op
+# 'off' in plaats van de pi-bridge te laten crashen — de rest van de kassa moet
+# gewoon blijven draaien.
+MYPOS_OK=0
+MYPOS_MODE="off"
+case "${MYPOS_TRANSPORT}" in
+  cloud)
+    MYPOS_MISSING=""
+    for v in MYPOS_PARTNER_ID MYPOS_APPLICATION_ID \
+             MYPOS_INTEGRATION_CLIENT_ID MYPOS_INTEGRATION_CLIENT_SECRET \
+             MYPOS_MERCHANT_CLIENT_ID MYPOS_MERCHANT_CLIENT_SECRET MYPOS_TID; do
+      [ -z "${!v}" ] && MYPOS_MISSING="${MYPOS_MISSING} ${v}"
+    done
+    if [ -n "${MYPOS_MISSING}" ]; then
+      WARNINGS+=("MYPOS_TRANSPORT=cloud maar deze ontbreken:${MYPOS_MISSING} — PIN uitgeschakeld.")
+    else
+      MYPOS_OK=1
+      MYPOS_MODE="cloud"
+    fi
+    ;;
+  off|"")
+    WARNINGS+=("myPOS staat uit (MYPOS_TRANSPORT=off) — PIN-betalingen zijn uitgeschakeld.")
+    ;;
+  *)
+    WARNINGS+=("MYPOS_TRANSPORT='${MYPOS_TRANSPORT}' is ongeldig (kies off of cloud) — PIN uitgeschakeld.")
+    ;;
+esac
 
 # De web-app draait op de Pi zelf: sta die origins standaard toe richting
 # pi-bridge (CORS), naast wat de gebruiker zelf opgeeft.
@@ -234,10 +260,21 @@ umask 027
   echo "SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}"
   echo "PI_BRIDGE_PAIRING_SECRET=${PI_BRIDGE_PAIRING_SECRET}"
   echo "PI_BRIDGE_ADMIN_TOKEN=${PI_BRIDGE_ADMIN_TOKEN}"
-  echo "MYPOS_BASE=${MYPOS_BASE}"
-  echo "MYPOS_SESSION_SECRET=${MYPOS_SESSION_SECRET:-unset}"
-  echo "MYPOS_PARTNER_ID=${MYPOS_PARTNER_ID:-unset}"
-  echo "MYPOS_APP_ID=${MYPOS_APP_ID:-unset}"
+  # MYPOS_MODE is 'off' zolang de sleutels voor de gekozen transport niet
+  # compleet zijn. Alleen de keys van de actieve transport worden weggeschreven;
+  # de pi-bridge valideert per modus en start dus ook zonder myPOS-config.
+  echo "MYPOS_TRANSPORT=${MYPOS_MODE}"
+  if [ "${MYPOS_MODE}" = "cloud" ]; then
+    echo "MYPOS_GATEWAY_URL=${MYPOS_GATEWAY_URL}"
+    echo "MYPOS_PARTNER_ID=${MYPOS_PARTNER_ID}"
+    echo "MYPOS_APPLICATION_ID=${MYPOS_APPLICATION_ID}"
+    echo "MYPOS_INTEGRATION_CLIENT_ID=${MYPOS_INTEGRATION_CLIENT_ID}"
+    echo "MYPOS_INTEGRATION_CLIENT_SECRET=${MYPOS_INTEGRATION_CLIENT_SECRET}"
+    echo "MYPOS_MERCHANT_CLIENT_ID=${MYPOS_MERCHANT_CLIENT_ID}"
+    echo "MYPOS_MERCHANT_CLIENT_SECRET=${MYPOS_MERCHANT_CLIENT_SECRET}"
+    echo "MYPOS_TID=${MYPOS_TID}"
+    echo "MYPOS_OPERATOR_CODE=${MYPOS_OPERATOR_CODE}"
+  fi
   echo "PRINTER_NETWORK_ADDR=${PRINTER_NETWORK_ADDR}"
   echo "PRINTER_TYPE=${PRINTER_TYPE}"
   echo "SQLITE_PATH=/data/pi-bridge.sqlite"
@@ -382,7 +419,7 @@ FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/n
     echo "Access point: uit (zet AP_SSID + AP_PASS in pos.env voor een eigen netwerk zonder internet)"
   fi
   echo "IP-adressen:  $(hostname -I 2>/dev/null)"
-  echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo geconfigureerd || echo 'NIET geconfigureerd')"
+  echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo "geconfigureerd (${MYPOS_MODE})" || echo 'NIET geconfigureerd')"
   echo "Printer:      ${PRINTER_TYPE} @ ${PRINTER_NETWORK_ADDR}"
   echo "Kiosk:        ${KIOSK_URL:-uit}"
   if [ "${ENABLE_RPI_CONNECT}" = "1" ]; then
