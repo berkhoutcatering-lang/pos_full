@@ -83,19 +83,23 @@ export function updateOrderStateViaPi(payload: {
   })
 }
 
+// The Pi normalises both myPOS transports (cloud REST and LAN/ECR) onto this
+// vocabulary, so the kassa never has to know which one is configured.
+export type MyPosStatus = "pending" | "approved" | "declined" | "failed"
+
 export function startMyPosViaPi(payload: {
   idempotency_key: string
   amount_cents: number
   order_id: string
 }) {
-  return call<{ transaction_id: string; status: string; reused?: boolean }>(
+  return call<{ transaction_id: string; status: MyPosStatus; reused?: boolean }>(
     "/mypos/start",
     { method: "POST", body: JSON.stringify(payload) },
   )
 }
 
 export function pollMyPosViaPi(transaction_id: string) {
-  return call<{ status: string; raw: unknown }>(
+  return call<{ status: MyPosStatus; code: string | null; raw: unknown }>(
     `/mypos/status/${encodeURIComponent(transaction_id)}`,
     { method: "GET" },
   )

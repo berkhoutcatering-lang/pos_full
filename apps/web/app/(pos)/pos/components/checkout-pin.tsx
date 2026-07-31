@@ -39,26 +39,43 @@ export function CheckoutPin({
     })
     if (!res.ok) {
       setPhase("error")
-      setError(res.error)
+      setError(
+        res.status === 503
+          ? "PIN staat uit op deze Pi — reken contant af."
+          : res.error,
+      )
       return
     }
     setTransactionId(res.data.transaction_id)
+
+    // The cloud transport can settle immediately; ECR always starts pending.
+    if (res.data.status === "approved") {
+      setPhase("approved")
+      await onPay()
+      return
+    }
+    if (res.data.status === "declined" || res.data.status === "failed") {
+      setPhase("declined")
+      return
+    }
+
     setPhase("polling")
     void pollLoop(res.data.transaction_id)
   }
 
+  // Poll a little past the Pi's own transaction timeout (120s by default) so
+  // the terminal giving up surfaces as a real status rather than as our timeout.
   const pollLoop = async (txId: string) => {
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 100; i++) {
       await new Promise((r) => setTimeout(r, 1500))
       const status = await pollMyPosViaPi(txId)
       if (!status.ok) continue
-      const s = status.data.status.toLowerCase()
-      if (s === "approved" || s === "captured" || s === "completed") {
+      if (status.data.status === "approved") {
         setPhase("approved")
         await onPay()
         return
       }
-      if (s === "declined" || s === "failed" || s === "canceled") {
+      if (status.data.status === "declined" || status.data.status === "failed") {
         setPhase("declined")
         return
       }
