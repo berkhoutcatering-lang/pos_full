@@ -14,7 +14,10 @@ export async function healthRoute(app: FastifyInstance) {
         status: "ok",
         outbox_pending: counts.pending,
         outbox_failed: counts.failed,
-        mypos_session_ok: !!config.MYPOS_SESSION_SECRET,
+        mypos_transport: config.MYPOS_TRANSPORT,
+        mypos_terminal_id: config.MYPOS_TID ?? null,
+        mypos_gateway:
+          config.MYPOS_TRANSPORT === "cloud" ? config.MYPOS_GATEWAY_URL : null,
         pglite_ok: true,
         venue_id: config.VENUE_ID,
         uptime_s: Math.round(process.uptime()),

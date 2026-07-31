@@ -56,6 +56,9 @@ importers:
       mdns:
         specifier: ^2.7.2
         version: 2.7.2
+      mypos-api-gateway:
+        specifier: ^0.1.2
+        version: 0.1.2
       node-thermal-printer:
         specifier: ^4.4.4
         version: 4.6.0
@@ -3427,6 +3430,10 @@ packages:
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
+
+  mypos-api-gateway@0.1.2:
+    resolution: {integrity: sha512-6/80U1rFBmN7M4SlgE86Ts/T7yoR7u/365FQ32P5qCYkiRA3uKNYC0pFmgywqXptPQv/QroLWMIz+wcgfHUd0A==}
+    engines: {node: '>=18.0.0'}
 
   nan@2.27.0:
     resolution: {integrity: sha512-hC+0LidcL3XE4rp1C4H54KujgXKzbfyTngZTwBByQxsOxCEKZT0MPQ4hOKUH2jU1OYstqdDH4onyHPDzcV0XdQ==}
@@ -7842,6 +7849,8 @@ snapshots:
   module-details-from-path@1.0.4: {}
 
   ms@2.1.3: {}
+
+  mypos-api-gateway@0.1.2: {}
 
   nan@2.27.0: {}
 

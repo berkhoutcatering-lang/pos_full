@@ -8,6 +8,7 @@ import {
   refundMyPos,
 } from "../services/mypos-proxy.js"
 import { writeAuditEvent } from "../services/audit-log.js"
+import { config } from "../config.js"
 import { ULID_RE } from "../utils/ulid.js"
 
 const StartSchema = z.object({
@@ -31,28 +32,24 @@ export async function myposRoutes(app: FastifyInstance) {
     "/mypos/start",
     { preHandler: authenticateTablet },
     async (req, reply) => {
+      // PIN stays off until credentials are configured. Say so plainly so the
+      // kassa can show "contant only" instead of a generic failure.
+      if (config.MYPOS_TRANSPORT === "off") {
+        return reply.code(503).send({ error: "mypos_disabled" })
+      }
+
       const parsed = StartSchema.safeParse(req.body)
       if (!parsed.success) {
         return reply.code(400).send({ error: "validation", issues: parsed.error.issues })
       }
       const claims = req.tabletClaims!
 
+      // No audit event here on purpose: the customer has not paid yet. The
+      // proxy writes payment.captured once the terminal actually approves.
       const result = await startMyPosTransaction({
         ...parsed.data,
         venue_id: claims.venue_id,
-      })
-
-      await writeAuditEvent({
-        event_type: "payment.captured",
-        payload: {
-          order_id: parsed.data.order_id,
-          amount_cents: parsed.data.amount_cents,
-          method: "pin",
-          mypos_transaction_id: result.transaction_id,
-          reused: result.reused ?? false,
-        },
         actor_terminal_id: claims.terminal_id,
-        venue_id: claims.venue_id,
       })
 
       return reply.send(result)
@@ -63,6 +60,9 @@ export async function myposRoutes(app: FastifyInstance) {
     "/mypos/status/:transaction_id",
     { preHandler: authenticateTablet },
     async (req, reply) => {
+      if (config.MYPOS_TRANSPORT === "off") {
+        return reply.code(503).send({ error: "mypos_disabled" })
+      }
       const parsed = StatusSchema.safeParse(req.params)
       if (!parsed.success) return reply.code(400).send({ error: "validation" })
       const result = await pollMyPosStatus(parsed.data.transaction_id)
@@ -74,6 +74,12 @@ export async function myposRoutes(app: FastifyInstance) {
     "/mypos/refund",
     { preHandler: [authenticateTablet, requireRole("manager")] },
     async (req, reply) => {
+      // Only the cloud transport can refund; over ECR myPOS documents no refund
+      // method, so staff move the money in the myPOS app itself.
+      if (config.MYPOS_TRANSPORT !== "cloud") {
+        return reply.code(503).send({ error: "mypos_refund_unsupported" })
+      }
+
       const parsed = RefundSchema.safeParse(req.body)
       if (!parsed.success) return reply.code(400).send({ error: "validation" })
 

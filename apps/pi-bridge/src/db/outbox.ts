@@ -118,6 +118,26 @@ piDb.exec(`
   CREATE INDEX IF NOT EXISTS mypos_refund_intents_txn ON mypos_refund_intents(transaction_id);
 `)
 
+// Additive migrations for databases created before a column existed. SQLite has
+// no ADD COLUMN IF NOT EXISTS, so we check the table info first.
+function addColumnIfMissing(table: string, column: string, definition: string) {
+  const cols = piDb.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string
+  }>
+  if (cols.some((c) => c.name === column)) return
+  piDb.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  logger.info({ table, column }, "sqlite: added missing column")
+}
+
+// The ECR transport has no myPOS-side transaction id at start time and settles
+// asynchronously on a held-open socket, so the intent row carries the terminal
+// that started it and the moment it was actually captured. `captured_at` also
+// makes the audit write idempotent across repeated status polls.
+addColumnIfMissing("mypos_intents", "actor_terminal_id", "TEXT")
+addColumnIfMissing("mypos_intents", "captured_at", "INTEGER")
+addColumnIfMissing("mypos_intents", "status_code", "TEXT")
+addColumnIfMissing("mypos_intents", "last_error", "TEXT")
+
 export interface OutboxRow {
   id: number
   idempotency_key: string
