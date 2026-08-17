@@ -33,13 +33,18 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-test-service-role}
       PI_BRIDGE_PAIRING_SECRET: ${PI_BRIDGE_PAIRING_SECRET:-test-pairing-secret-min-32-chars-long}
       PI_BRIDGE_ADMIN_TOKEN: ${PI_BRIDGE_ADMIN_TOKEN:-test-admin-token-min-32-chars-long-xx}
-      # Integration tests drive the cloud transport against a MockServer; the
-      # LAN/ECR transport has its own unit tests in src/services/mypos-ecr.spec.ts.
+      # Integration tests drive the cloud transport against a MockServer. The
+      # credentials below are dummies that only have to satisfy config.ts —
+      # the gateway client is built lazily, so booting never calls out.
       MYPOS_TRANSPORT: cloud
-      MYPOS_BASE: http://mock-mypos:1080
-      MYPOS_SESSION_SECRET: test-mypos-session
-      MYPOS_PARTNER_ID: test-partner
-      MYPOS_APP_ID: test-app
+      MYPOS_GATEWAY_URL: http://mock-mypos:1080
+      MYPOS_PARTNER_ID: mps-p-test
+      MYPOS_APPLICATION_ID: mps-app-test
+      MYPOS_INTEGRATION_CLIENT_ID: client_test
+      MYPOS_INTEGRATION_CLIENT_SECRET: secret_test
+      MYPOS_MERCHANT_CLIENT_ID: cli_test
+      MYPOS_MERCHANT_CLIENT_SECRET: sec_test
+      MYPOS_TID: "80561740"
       PRINTER_NETWORK_ADDR: mock-printer:9100
       PRINTER_TYPE: star
       SQLITE_PATH: /data/pi-bridge.sqlite
@@ -72,11 +77,10 @@ services:
       MOCKSERVER_LOG_LEVEL: WARN
     volumes:
       - ./test/mocks/mypos:/config:ro
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:1080/mockserver/status", "-X", "PUT"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+    # No healthcheck: the mockserver image ships neither curl nor a shell, so
+    # any `test:` here fails forever and pins the container to "unhealthy".
+    # Readiness is probed from the host instead (health-check.ps1, and the
+    # wait loop in .github/workflows/audit-validation.yml).
     networks:
       - hopbites-test
 

@@ -23,7 +23,9 @@ $deadline = (Get-Date).AddSeconds(90)
 $ready = $false
 while ((Get-Date) -lt $deadline) {
     $health = docker compose -f docker-compose.test.yml ps --format json | ConvertFrom-Json
-    $unhealthy = $health | Where-Object { $_.Health -ne "healthy" -and $_.Service -ne "mock-printer" -and $_.Service -ne "playwright" }
+    # Only pi-bridge declares a healthcheck; the mock images have no shell to
+    # run one in, so they are readiness-probed from the host afterwards.
+    $unhealthy = $health | Where-Object { $_.Health -ne "healthy" -and $_.Service -notin @("mock-printer", "mock-mypos", "playwright") }
     if (-not $unhealthy) {
         $ready = $true
         break
