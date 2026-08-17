@@ -157,80 +157,70 @@ async function authHeaders() {
 }
 
 /**
- * Koppelt de terminal aan deze integratie met de code die de terminal toont.
+ * DOODLOPEND SPOOR — bewaard zodat niemand het opnieuw probeert.
  *
- * De SDK's terminals.activate() stuurt geen body en krijgt daardoor HTTP 415.
- * De veldnaam is niet gedocumenteerd, dus we proberen de gangbare varianten —
- * de code is maar een minuut geldig, dus dat moet binnen één run.
+ * `/pos/v1/terminals/activation` is provisioning, geen koppeling. Empirisch
+ * vastgesteld op 2026-07-31: met een lege body antwoordt de API HTTP 500,
+ * "Cannot write a null value for property 'product_code'". Aanvullen van die
+ * velden maakt vermoedelijk een nieuwe terminal aan — niet doen.
+ *
+ * De docstring in mypos-api-gateway@0.1.2 ("Generate an activation code for a
+ * terminal — returns an activation code to be entered on the terminal") klopt
+ * niet met het gedrag van dit endpoint. Bovendien zit alles rond `terminals`
+ * onder `/pos/v1/`, terwijl de hele ePOS-API uit drie paden bestaat:
+ * `/epos/v1/payments`, `/epos/v1/payments/{id}` en `/epos/v1/payments/refund`.
+ * Er bestaat dus geen koppel-endpoint, en de HTTP 403 op een betaling is niet
+ * met een API-aanroep te verhelpen — dat zit in de terminalconfiguratie
+ * (POSLink Manager, Pair Type = EPOS) of in een recht op de integratie.
+ *
+ * De body is bewust een leeg object: de SDK stuurt helemaal geen body en zet
+ * daardoor geen Content-Type, wat HTTP 415 oplevert.
  */
-async function activate(code) {
-  if (!code || code === true) {
-    console.error("Geef de code mee die de terminal toont: --activate 12345678")
-    process.exit(1)
-  }
-
+async function activate() {
   console.log("Authenticeren…")
   const headers = await authHeaders()
   const url = `${gatewayUrl}/pos/v1/terminals/activation`
 
-  // De API klaagt per keer over één ontbrekend veld. Die naam lezen we uit en
-  // vullen we aan, zodat we binnen de geldigheid van één code door alle
-  // verplichte velden heen lopen in plaats van per veld een nieuwe code te
-  // moeten ophalen.
-  const tid = process.env.MYPOS_TID || args.tid
-  const body = { product_code: String(code) }
+  const res = await fetch(url, { method: "POST", headers, body: "{}" })
+  const text = await res.text()
+  console.log(`POST /pos/v1/terminals/activation -> HTTP ${res.status}`)
 
-  /** Beste gok per veldnaam; onbekende velden krijgen de code zelf. */
-  const guess = (name) => {
-    const n = name.toLowerCase()
-    if (n.includes("terminal")) return tid ?? String(code)
-    if (n.includes("currency")) return "EUR"
-    if (n.includes("amount")) return 0
-    if (n.includes("app_name") || n === "appname") return "HopBitesPOS"
-    if (n.includes("app_version") || n === "appversion") return "1.0.0"
-    return String(code)
-  }
+  if (res.ok) {
+    const code = (() => {
+      try {
+        const json = JSON.parse(text)
+        return json.code ?? json.data?.code ?? null
+      } catch {
+        return null
+      }
+    })()
 
-  for (let attempt = 1; attempt <= 8; attempt++) {
-    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) })
-    const text = await res.text()
-    console.log(`  ${attempt}. ${Object.keys(body).join(", ")} -> HTTP ${res.status}`)
-
-    if (res.ok) {
-      hr()
-      console.log("GEACTIVEERD")
+    hr()
+    if (code) {
+      console.log(`Activatiecode: ${code}`)
+      console.log(`
+Tik deze code in op de terminal om hem aan deze integratie te koppelen.
+Draai daarna --pay 0.01 om te zien of de 403 weg is.`)
+    } else {
+      console.log("Gelukt, maar geen 'code' in de respons:")
       console.log(text || "(lege body)")
-      return
     }
-
-    if (res.status === 401 || res.status === 403) {
-      console.log(`     ${text.slice(0, 300)}`)
-      hr()
-      console.log("Geweigerd op rechten, niet op vorm — dit is dezelfde blokkade als bij de betaling.")
-      return
-    }
-
-    // "Cannot write a null value for property 'product_code'."
-    const m = text.match(/property '([^']+)'/i) || text.match(/"([a-z_]+)" is required/i)
-    if (!m) {
-      console.log(`     ${text.slice(0, 400)}`)
-      break
-    }
-    const field = m[1]
-    if (field in body) {
-      console.log(`     API blijft klagen over '${field}' — waarde is vermoedelijk verkeerd.`)
-      console.log(`     ${text.slice(0, 300)}`)
-      break
-    }
-    body[field] = guess(field)
-    console.log(`     ontbrak: ${field} -> ${JSON.stringify(body[field])}`)
+    hr()
+    return
   }
 
   hr()
-  console.log(`
-Niet gelukt. Is de code verlopen (hij geldt maar een minuut), haal dan een
-verse op de terminal en draai opnieuw — het script onthoudt niets tussen runs.
-`)
+  console.log(text.slice(0, 600) || "(lege body)")
+  hr()
+
+  if (res.status === 401 || res.status === 403) {
+    console.log("Geweigerd op rechten — dezelfde blokkade als bij de betaling.")
+  } else if (/property|required/i.test(text)) {
+    console.log(`
+De API vraagt om velden. Vul die NIET blind aan: velden als product_code,
+currency en account_number horen bij het aanmaken van een terminal, niet bij
+het koppelen ervan. Leg dit antwoord voor aan myPOS.`)
+  }
 }
 
 async function pay(amountEuro) {
@@ -311,14 +301,14 @@ const main = async () => {
 
   if (args.terminals) return listTerminals()
   if (args.terminal) return terminalDetails(args.terminal)
-  if (args.activate) return activate(args.activate)
+  if (args.activate) return activate()
   if (args.pay) return pay(args.pay)
 
   console.log(`
 Gebruik:
   node scripts/mypos-pay.mjs --terminals            Terminals van deze integratie
   node scripts/mypos-pay.mjs --terminal <TID>       Details en status van een terminal
-  node scripts/mypos-pay.mjs --activate             Terminal aan de integratie koppelen
+  node scripts/mypos-pay.mjs --activate             Activatiecode ophalen (tik je op de terminal in)
   node scripts/mypos-pay.mjs --pay 0.01 --tid <TID> Betaling van 1 cent
 `)
 }
