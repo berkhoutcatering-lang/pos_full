@@ -5,6 +5,7 @@ import { requireRole } from "../middleware/auth-tablet.js"
 import {
   startMyPosTransaction,
   pollMyPosStatus,
+  cancelMyPosTransaction,
   refundMyPos,
 } from "../services/mypos-proxy.js"
 import { writeAuditEvent } from "../services/audit-log.js"
@@ -65,8 +66,39 @@ export async function myposRoutes(app: FastifyInstance) {
       }
       const parsed = StatusSchema.safeParse(req.params)
       if (!parsed.success) return reply.code(400).send({ error: "validation" })
-      const result = await pollMyPosStatus(parsed.data.transaction_id)
-      return reply.send(result)
+      try {
+        return reply.send(await pollMyPosStatus(parsed.data.transaction_id))
+      } catch (err) {
+        // The intent is gone (reconciled away, or never existed on this Pi).
+        // A 404 tells the kassa to start over rather than to keep polling.
+        if ((err as Error).message === "mypos_unknown_transaction") {
+          return reply.code(404).send({ error: "mypos_unknown_transaction" })
+        }
+        throw err
+      }
+    },
+  )
+
+  // Give up on a PIN that is still on the terminal. Called when the operator
+  // walks away from the payment screen, so the amount does not stay armed.
+  app.post(
+    "/mypos/cancel",
+    { preHandler: authenticateTablet },
+    async (req, reply) => {
+      if (config.MYPOS_TRANSPORT === "off") {
+        return reply.code(503).send({ error: "mypos_disabled" })
+      }
+      const parsed = StatusSchema.safeParse(req.body)
+      if (!parsed.success) return reply.code(400).send({ error: "validation" })
+
+      try {
+        return reply.send(await cancelMyPosTransaction(parsed.data.transaction_id))
+      } catch (err) {
+        if ((err as Error).message === "mypos_unknown_transaction") {
+          return reply.code(404).send({ error: "mypos_unknown_transaction" })
+        }
+        throw err
+      }
     },
   )
 

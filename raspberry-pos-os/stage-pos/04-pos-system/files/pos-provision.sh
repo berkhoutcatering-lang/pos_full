@@ -242,6 +242,22 @@ case "${MYPOS_TRANSPORT}" in
     ;;
 esac
 
+# PIN over de ePOS-API is een HTTPS-aanroep vanaf de Pi. In AP-modus is wlan0
+# bezet met uitzenden, dus dan moet het internet ergens anders vandaan komen.
+# Draait er geen kabel in, dan lukt geen enkele PIN-betaling en dat hoort de
+# gebruiker te lezen vóór de eerste klant aan de balie staat.
+if [ "${MYPOS_OK}" = 1 ] && [ "${AP_ACTIVE}" = 1 ]; then
+  WIRED_UP=0
+  for c in /sys/class/net/*/carrier; do
+    ifn=$(basename "$(dirname "${c}")")
+    case "${ifn}" in wlan*|lo) continue ;; esac
+    [ "$(cat "${c}" 2>/dev/null)" = "1" ] && WIRED_UP=1
+  done
+  if [ "${WIRED_UP}" = 0 ]; then
+    WARNINGS+=("MYPOS_TRANSPORT=cloud met een eigen access point (AP_SSID), maar geen bekabelde uplink — PIN heeft internet nodig. Sluit ethernet/USB-tethering aan, of laat de Pi met WIFI_SSID op een netwerk mét internet zitten.")
+  fi
+fi
+
 # De web-app draait op de Pi zelf: sta die origins standaard toe richting
 # pi-bridge (CORS), naast wat de gebruiker zelf opgeeft.
 LOCAL_ORIGINS="https://${HN}.local,https://hopbites.local,https://pos.lan"

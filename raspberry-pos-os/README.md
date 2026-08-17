@@ -33,7 +33,7 @@ tijdens de dienst.** Het image bevat:
 | Ingelogd blijven | ✅ offline-identity cookie + lokale claims-cache (30 dagen) |
 | Opnieuw inloggen (zelfde account) | ✅ lokale wachtwoord-verificatie (argon2-cache, 30 dagen) — werkt per account nadat het één keer online op deze Pi inlogde |
 | **Allereerste login van een account** | ❌ Supabase Auth heeft éénmalig internet nodig per account |
-| PIN (myPOS) | ❌ nog niet — de pi-bridge gaat vandaag via de myPOS-cloud en heeft dus internet op de Pi nodig. Zie [myPOS PIN-terminal (Ultra)](#mypos-pin-terminal-ultra) voor de LAN-route die dat moet oplossen |
+| PIN (myPOS) | ❌ de pi-bridge gaat via de myPOS ePOS API en heeft dus internet op de Pi nodig (WiFi volstaat). Een LAN-route zonder internet is uitgezocht en werkt niet — zie [myPOS PIN-terminal (Ultra)](#mypos-pin-terminal-ultra) |
 | Supabase-sync, dagafsluiting-data, AI | ⏳ zodra er weer internet is (ethernet/tethering) flusht de outbox |
 
 ## Image bouwen
@@ -105,145 +105,100 @@ herstart de Pi.
 
 ## myPOS PIN-terminal (Ultra)
 
-> **Status: geblokkeerd op myPOS. PIN werkt nog niet.**
+> **Status: de route is de myPOS ePOS API. De Pi heeft daarvoor internet
+> nodig — WiFi volstaat.**
 >
-> De terminal accepteert TCP-verbindingen op poort 7900 maar antwoordt op geen
-> enkel protocol dat we konden afleiden uit myPOS' eigen SDK's. Vermoeden: er is
-> een koppelstap ("key pairing") nodig voordat de terminal commando's van een
-> kassa accepteert. De vraag staat uit bij myPOS — zie
-> [MYPOS-SUPPORT-VRAAG.md](smoke/MYPOS-SUPPORT-VRAAG.md).
+> De terminal rechtstreeks over het LAN aansturen is uitgezocht en losgelaten,
+> net als een eigen Android-app op de Ultra. De volledige onderbouwing staat in
+> [smoke/MYPOS-OVERDRACHT.md](smoke/MYPOS-OVERDRACHT.md); ga die transporten
+> niet opnieuw proberen.
 >
-> De transportlaag in de pi-bridge (`MYPOS_TRANSPORT=ecr`) spreekt momenteel het
-> JSON+HMAC-protocol uit `mypos-js`, en dat is **aantoonbaar niet** wat deze
-> terminal spreekt. Die moet herschreven worden zodra het juiste protocol
-> bekend is.
->
-> Dit blokkeert de rest niet: PIN staat standaard uit (`MYPOS_TRANSPORT=off`),
-> de Pi start daar prima mee op, en alles behalve pinnen werkt volledig.
+> Nog open aan myPOS' kant: `POST /epos/v1/payments` gaf op deze terminal
+> HTTP 403. Authenticatie en terminal-lookup werken wel. Zolang die 403 er is,
+> komt er geen bedrag op de terminal — dat is een instelling bij myPOS, niet
+> iets wat in deze code te repareren valt.
 
-In de truck heeft alleen de Ultra internet, via zijn eigen simkaart. De Pi niet:
-`wlan0` kan niet tegelijk AP zijn én met een ander WiFi verbinden, dus in
-AP-modus is er geen uplink. De cloud-route valt daarmee af — de Pi moet de
-terminal **direct over het lokale netwerk** aansturen. De Ultra houdt zijn SIM
-voor de bankautorisatie; het WiFi is puur het commandokanaal vanaf de Pi.
+De Pi roept de myPOS API Gateway aan, myPOS duwt het bedrag naar de Ultra, en
+de Ultra autoriseert de kaart via zijn **eigen simkaart**. Over de uplink van
+de Pi gaan dus alleen een paar kleine HTTPS-aanroepen; het betaalverkeer zelf
+gaat buiten de Pi om.
 
-Het protocol daarvoor is niet gedocumenteerd op developers.mypos.com, maar
-myPOS' eigen npm-SDK bevat een werkende implementatie
-([`mypos-js`](https://github.com/developermypos/mypos-js),
-`resources/devices/semi-integrated/base-request.js`): een kale TCP-socket, één
-JSON-blob, HMAC-SHA256-signature, en een `status: 100` die "bezig" betekent
-zolang de klant nog niet getikt heeft.
+```
+Pi (WiFi/ethernet) ──HTTPS──> myPOS API Gateway ──> Ultra ──SIM──> autorisatie
+```
 
-> Rondzwervende handleidingen die een HTTP `POST /payment` met
-> `{amount, currency, reference_number}` beschrijven zijn **niet echt** — geen
-> authenticatie, en ze spreken myPOS' eigen SDK tegen. Niet op bouwen.
+Dit betekent wel dat `wlan0` niet tegelijk access point kan zijn: in AP-modus
+moet het internet via de ethernet-poort of USB-tethering binnenkomen. Zet je
+`MYPOS_TRANSPORT=cloud` met `AP_SSID` én zonder kabel, dan waarschuwt
+`STATUS.txt` daarover bij het opstarten.
 
 ### 1. Sleutels ophalen
 
-Op [merchant.mypos.com](https://merchant.mypos.com) → **Integraties → REST API**
-→ *Nieuwe referenties genereren*. Je krijgt een **klantnummer** en
-**klantgeheim**; die zijn de `api_key`/`api_secret` uit de SDK.
+Op [partners.mypos.com](https://partners.mypos.com), bij je Smart
+POS-integratie:
 
-Let op: dit is een ander paar dan de Partner Portal-credentials
-(`MYPOS_PARTNER_ID`/`MYPOS_APP_ID`/`MYPOS_SESSION_SECRET` in `pos.env`) — die
-horen bij de cloud-route. Deze sleutels horen **alleen op de Pi**, nooit in de
-root-`.env` of bij Vercel.
+- **Summary** → Partner ID (`mps-p-…`) en Application ID (`mps-app-…`)
+- **Generate API Credentials** → `client_…` en `secret_…` (het secret zie je
+  maar één keer)
+- **Merchants** → koppel je eigen account en keur het goed → `cli_…` / `sec_…`
+
+Let op: het klantnummer/klantgeheim van merchant.mypos.com → *Integraties →
+REST API* is een **ander** paar en hoort bij een andere API. Gebruik je dat
+hier, dan krijg je "Session creation failed (HTTP 400)".
 
 ### 2. Terminal-ID opzoeken
 
-```powershell
-$env:MYPOS_API_KEY = '<klantnummer>'
-$env:MYPOS_API_SECRET = '<klantgeheim>'
-node raspberry-pos-os\smoke\mypos-devices.mjs
-```
-
-Draai dit op een machine mét internet (je laptop), niet op de Pi. Je krijgt per
-terminal `terminal_id`, `serial_number` en `model`. Heb je meerdere terminals
-van hetzelfde model, dan is het serienummer wat ze onderscheidt — dat staat op
-de terminal onder `Settings → About Terminal` en op de sticker.
-
-### 3. Ultra aan het netwerk van de Pi
-
-Op de terminal: `Network & Internet → Wi-Fi` → jouw `AP_SSID`. **Vóór** je op
-verbinden tikt, geavanceerde opties openen en een statisch IP zetten:
-
-| | |
-|---|---|
-| IP-adres | `10.42.0.5` |
-| Gateway | `10.42.0.1` |
-| Prefix | `24` |
-| DNS | `10.42.0.1` |
-
-Kies iets **onder** `10.42.0.10`: NetworkManager draait in shared mode een
-DHCP-pool van `.10` t/m `.254`, dus een statisch adres daarbinnen kan botsen
-met een tablet.
-
-Android meldt dat dit netwerk geen internet heeft — verbonden blijven, en
-mobiele data aan laten staan.
-
-### 4. ECR-POS Connect installeren
-
-1. `Settings → About Terminal → Update Configuration → Update Software → Update All`
-2. `App Market → Categories → myPOS Apps → ECR-POS Connect` → installeren
-3. App openen → BTW-nummer → *Cash Register Machine* → WiFi als verbinding naar
-   de kassa
-
-Het scherm toont dan "Waiting for data from cash register" met een IP en poort.
-De app moet **open op de voorgrond** blijven: geminimaliseerd weigert de
-terminal de socket.
-
-### 5. Protocol bevestigen
-
-Eerst zonder sleutels — dit stuurt geen betaalopdracht, alleen een poortscan en
-een passieve banner-lees:
-
 ```bash
-node raspberry-pos-os/smoke/mypos-ecr-probe.mjs --host 10.42.0.5
+cd apps/pi-bridge && node scripts/mypos-pay.mjs --terminals
 ```
 
-Vindt hij een open poort, dan de echte probe. De terminal wordt hierbij wakker
-en toont het bedrag — laat de transactie aflopen of annuleer hem, niet met een
-kaart doorgaan:
+Draait vanaf je laptop, heeft de Pi niet nodig. Het TID staat ook op de
+terminal zelf onder *Settings → About Terminal*.
 
-```bash
-export MYPOS_API_KEY='<klantnummer>'
-export MYPOS_API_SECRET='<klantgeheim>'
-node raspberry-pos-os/smoke/mypos-ecr-probe.mjs --host 10.42.0.5 \
-     --pay 0.01 --tid <TERMINAL_ID> --http
-```
+### 3. Aanzetten
 
-Geef de sleutels via de omgeving door, niet als CLI-argument: argumenten zijn
-op Linux zichtbaar in de procestabel voor elke andere gebruiker.
-
-### Wat er tot nu toe vaststaat
-
-| | |
-|---|---|
-| Klantnummer/klantgeheim | geldig — token via `auth-api.mypos.com/oauth/token`, 24u |
-| OAuth-scope | `webhooks` (scope `devices` bestaat niet) |
-| Terminals opvragen | `GET devices-api.mypos.com/v1/devices` **mét** JSON-body `{}` |
-| ePOS API (cloud) | werkt alleen mét internet op de Pi — vandaar deze route |
-| Poort op de Ultra | **onbevestigd**: SDK zegt 8888, ECR-docs zeggen 7900 |
-| Lokaal protocol | **onbevestigd** — dat is wat stap 5 uitwijst |
-
-`GET` mét body kan niet via `fetch()` (die gooit de body stil weg); de scripts
-gebruiken daarom `node:https`.
-
-### 6. Aanzetten
-
-Vul in `pos.env` in: `MYPOS_TRANSPORT=ecr`, `MYPOS_ECR_HOST`, `MYPOS_ECR_PORT`,
-`MYPOS_API_KEY`, `MYPOS_API_SECRET` en `MYPOS_TID` (of `MYPOS_SN`). Herstart de
-Pi en controleer `pos-setup/STATUS.txt`: daar hoort `myPOS PIN: geconfigureerd
-(ecr)` te staan.
+Vul in `pos.env` in: `MYPOS_TRANSPORT=cloud`, de zes sleutels uit stap 1, en
+`MYPOS_TID`. Zet de Pi op een netwerk mét internet (`WIFI_SSID`/`WIFI_PASS`,
+of een kabel). Herstart de Pi en lees `pos-setup/STATUS.txt`: daar hoort
+`myPOS PIN: geconfigureerd (cloud)` te staan.
 
 Ontbreekt er een sleutel, dan valt de provisioning terug op `off` met een
-waarschuwing in STATUS.txt — de pi-bridge start dan gewoon door, alleen zonder
-PIN. Controleren kan ook via
-`curl -k -H "x-admin-token: <token>" https://hopbites.local:3001/_health`, die
-`mypos_transport` en `mypos_target` teruggeeft.
+waarschuwing — de pi-bridge start dan gewoon door, alleen zonder PIN.
+Controleren kan ook via:
 
-Zit de bedrag-eenheid ernaast, dan is dat `MYPOS_ECR_AMOUNT_UNIT=cent` in
-`pos.env` — geen codewijziging.
+```bash
+curl -k -H "x-admin-token: <token>" https://hopbites.local:3001/_health
+```
+
+Die geeft `mypos_transport`, `mypos_terminal_id` en `mypos_gateway` terug.
+
+### 4. Eerst testen zonder kassa
+
+```bash
+cd apps/pi-bridge && node scripts/mypos-pay.mjs --pay 0.01
+```
+
+Zet één cent klaar op de terminal en pollt tot er een eindstatus is. Dit is
+ook de aanroep waarmee je ziet of de 403 hierboven weg is.
+
+### Wat er gebeurt als de verbinding wegvalt
+
+Dat is bij een foodtruck de normale toestand, dus de kassa gokt nooit:
+
+- Valt de verbinding weg vóór myPOS antwoordt, dan staat de betaling op
+  `unresolved` en vraagt de kassa de medewerker om op de terminal te kijken.
+  Er wordt niet automatisch opnieuw aangeslagen.
+- Zodra er weer verbinding is, zoekt de Pi de betaling zelf op via het
+  referentienummer (dat is de idempotency-key) en pakt de echte status alsnog
+  op — ook als dat "goedgekeurd" blijkt.
+- Blijkt myPOS de betaling nooit ontvangen te hebben, dan komt dezelfde key
+  weer vrij en kan de medewerker gewoon opnieuw aanslaan.
+- Staat een betaling langer dan drie minuten open, dan meldt de kassa dat en
+  laat ze de keuze aan de medewerker. Een kaart die wél belast is maar als
+  onbetaald wordt geboekt, is erger dan een trage checkout.
+
+Annuleren op het kassascherm haalt het bedrag ook echt van de terminal af, zodat
+een klant die een minuut later alsnog tikt niet voor niets betaalt.
 
 ## Inloggen / beheer
 

@@ -1,6 +1,7 @@
 import {
   MyPOSGateway,
   type MerchantClient,
+  type PaymentInfoItem,
 } from "mypos-api-gateway"
 import { config } from "../config.js"
 import { piDb } from "../db/outbox.js"
@@ -26,7 +27,18 @@ if (typeof window !== "undefined") {
   throw new Error("mypos-proxy must only be loaded server-side")
 }
 
-export type NormalizedStatus = "pending" | "approved" | "declined" | "failed"
+/**
+ * `unresolved` is the honest answer to "did the card get charged?" when the
+ * uplink dropped between our request and myPOS' answer. It is never a silent
+ * pending: the kassa must stop and let the operator look at the terminal,
+ * because guessing wrong here either charges twice or gives food away.
+ */
+export type NormalizedStatus =
+  | "pending"
+  | "approved"
+  | "declined"
+  | "failed"
+  | "unresolved"
 
 export interface MyPosStartArgs {
   idempotency_key: string
@@ -41,6 +53,8 @@ export interface MyPosStartResult {
   transaction_id: string
   status: NormalizedStatus
   reused?: boolean
+  /** Set on failed/unresolved: what the operator has to do about it. */
+  message?: string
 }
 
 interface IntentRow {
@@ -54,10 +68,22 @@ interface IntentRow {
   captured_at: number | null
   status_code: string | null
   last_error: string | null
+  created_at: number
 }
 
 const APP_NAME = "HopBitesPOS"
 const APP_VERSION = "1.0.0"
+
+/**
+ * How long a payment may sit on `pending` before the kassa is told to look at
+ * the terminal instead of waiting. myPOS expires its own request well after
+ * this; three minutes is "the customer has walked off or the app crashed".
+ */
+const STALE_PENDING_MS = 3 * 60_000
+
+/** Page size and page budget for reference-number reconciliation. */
+const RECONCILE_PAGE_SIZE = 50
+const RECONCILE_PAGES = 2
 
 // Built lazily so the bridge boots fine with MYPOS_TRANSPORT=off.
 let cachedClient: MerchantClient | null = null
@@ -103,6 +129,21 @@ function normalizeStatus(raw: string): NormalizedStatus {
   return "pending"
 }
 
+/**
+ * Operator-facing text for a refused create. 403 gets its own line because it
+ * is the one failure that is not about this transaction at all: myPOS accepts
+ * the credentials but the terminal is not cleared for ePOS payments.
+ */
+function startFailureText(status: number, statusMessage: string): string {
+  if (status === 403) {
+    return "myPOS staat deze terminal (nog) geen ePOS-betalingen toe — reken contant af en meld dit."
+  }
+  if (status === 404) {
+    return "myPOS kent dit terminal-ID niet — controleer MYPOS_TID op de Pi."
+  }
+  return `myPOS weigerde de betaling (${status}: ${statusMessage}) — reken contant af.`
+}
+
 function findIntent(handle: string): IntentRow | undefined {
   return piDb
     .prepare(
@@ -111,6 +152,14 @@ function findIntent(handle: string): IntentRow | undefined {
        LIMIT 1`,
     )
     .get(handle, handle) as IntentRow | undefined
+}
+
+/**
+ * Drop an intent so the same idempotency key may start a fresh payment. Only
+ * ever called once we have proof that myPOS holds nothing under this key.
+ */
+function dropIntent(idempotency_key: string) {
+  piDb.prepare("DELETE FROM mypos_intents WHERE idempotency_key = ?").run(idempotency_key)
 }
 
 function updateIntent(
@@ -133,6 +182,72 @@ function updateIntent(
   piDb
     .prepare(`UPDATE mypos_intents SET ${sets.join(", ")} WHERE idempotency_key = ?`)
     .run(...values)
+}
+
+type Reconciled =
+  | { outcome: "found"; status: NormalizedStatus; paymentId: string; code: string }
+  /** myPOS demonstrably holds no payment under this reference. */
+  | { outcome: "absent" }
+  /** We could not ask — still unresolved, try again later. */
+  | { outcome: "unknown" }
+
+/**
+ * Answer "does myPOS know this reference?" by listing the terminal's payments
+ * and matching on our idempotency key, which we send as `referenceNumber`.
+ *
+ * This is the recovery path for a create whose answer we never saw. Without it
+ * a single dropped response leaves the order permanently unpayable by card:
+ * the intent row is there, so every retry with the same key gets handed back
+ * the same dead row, and no key means no way to ask myPOS what happened.
+ *
+ * The list endpoint carries no timestamp and myPOS does not document its sort
+ * order, so we read both ends: the first pages and the last ones. The payment
+ * we are looking for is at most minutes old, so it has to sit at whichever end
+ * is the newest — absent from both ends means absent, however myPOS sorts. If
+ * a page cannot be fetched we say `unknown` rather than claim an absence we
+ * cannot back up.
+ */
+async function reconcileIntent(row: IntentRow): Promise<Reconciled> {
+  const seen: PaymentInfoItem[] = []
+  let totalPages = 1
+
+  const readPage = async (page: number): Promise<boolean> => {
+    const listed = await client().epos.payments.list({
+      terminalId: config.MYPOS_TID!,
+      page,
+      size: RECONCILE_PAGE_SIZE,
+    })
+    if (!listed.success) {
+      logger.warn(
+        { status: listed.status, message: listed.statusMessage, page },
+        "myPOS reconcile could not reach the gateway",
+      )
+      return false
+    }
+    totalPages = listed.totalPages ?? 1
+    seen.push(...(listed.items ?? []))
+    return true
+  }
+
+  for (let page = 1; page <= RECONCILE_PAGES; page++) {
+    if (!(await readPage(page))) return { outcome: "unknown" }
+    if (page >= totalPages) break
+  }
+
+  const tailStart = Math.max(totalPages - RECONCILE_PAGES + 1, RECONCILE_PAGES + 1)
+  for (let page = tailStart; page <= totalPages; page++) {
+    if (!(await readPage(page))) return { outcome: "unknown" }
+  }
+
+  const match = seen.find((p) => p.referenceNumber === row.idempotency_key)
+  if (!match) return { outcome: "absent" }
+
+  return {
+    outcome: "found",
+    status: normalizeStatus(match.status),
+    paymentId: match.requestId,
+    code: match.status,
+  }
 }
 
 /**
@@ -165,6 +280,47 @@ async function captureOnce(idempotency_key: string) {
   })
 }
 
+/**
+ * What to hand back for an idempotency key we have seen before — or `null` if
+ * the previous attempt provably never reached myPOS, in which case the caller
+ * may start over under the same key.
+ */
+async function settleExisting(row: IntentRow): Promise<MyPosStartResult | null> {
+  const handle = row.transaction_id ?? row.idempotency_key
+
+  // A create that was refused outright (validation, 403) created nothing, so a
+  // retry is safe and is what the operator is asking for by tapping again.
+  if (row.status === "failed" && !row.transaction_id) return null
+
+  if (row.status === "unresolved") {
+    const found = await reconcileIntent(row)
+    if (found.outcome === "absent") return null
+    if (found.outcome === "unknown") {
+      return {
+        transaction_id: handle,
+        status: "unresolved",
+        reused: true,
+        message:
+          "Onbekend of deze betaling bij myPOS is aangekomen — controleer de terminal voor je opnieuw aanslaat.",
+      }
+    }
+    updateIntent(row.idempotency_key, {
+      transaction_id: found.paymentId,
+      status: found.status,
+      status_code: found.code,
+      last_error: null,
+    })
+    if (found.status === "approved") await captureOnce(row.idempotency_key)
+    return { transaction_id: found.paymentId, status: found.status, reused: true }
+  }
+
+  return {
+    transaction_id: handle,
+    status: row.status as NormalizedStatus,
+    reused: true,
+  }
+}
+
 export async function startMyPosTransaction(
   args: MyPosStartArgs,
 ): Promise<MyPosStartResult> {
@@ -172,11 +328,10 @@ export async function startMyPosTransaction(
 
   const existing = findIntent(args.idempotency_key)
   if (existing) {
-    return {
-      transaction_id: existing.transaction_id ?? existing.idempotency_key,
-      status: existing.status as NormalizedStatus,
-      reused: true,
-    }
+    const settled = await settleExisting(existing)
+    if (settled) return settled
+    // Proven absent at myPOS — the key is free to be used for a real attempt.
+    dropIntent(existing.idempotency_key)
   }
 
   const now = Date.now()
@@ -197,26 +352,61 @@ export async function startMyPosTransaction(
       now,
     )
 
-  const result = await client().epos.payments.create({
-    referenceNumber: args.idempotency_key,
-    amount: { value: args.amount_cents, currencyCode: "EUR", tip: 0 },
-    description: `Order ${args.order_id}`,
-    terminalId: config.MYPOS_TID!,
-    appName: APP_NAME,
-    appVersion: APP_VERSION,
-    operatorCode: config.MYPOS_OPERATOR_CODE,
-  })
+  // The reference number is our idempotency key on purpose: it is the only
+  // field myPOS echoes back in the payments list, so it doubles as the handle
+  // for reconciliation when we lose the answer to this very call.
+  let result: Awaited<ReturnType<MerchantClient["epos"]["payments"]["create"]>>
+  try {
+    result = await client().epos.payments.create({
+      referenceNumber: args.idempotency_key,
+      amount: { value: args.amount_cents, currencyCode: "EUR", tip: 0 },
+      description: `Order ${args.order_id}`,
+      terminalId: config.MYPOS_TID!,
+      appName: APP_NAME,
+      appVersion: APP_VERSION,
+      operatorCode: config.MYPOS_OPERATOR_CODE,
+    })
+  } catch (err) {
+    // Authentication runs before the payment is posted, so a token failure
+    // means nothing was created — say so instead of leaving it in doubt.
+    const authFailure = (err as Error).name === "GatewayAuthError"
+    const message = (err as Error).message
+    logger.error({ err: message, authFailure }, "myPOS payment create threw")
+    updateIntent(args.idempotency_key, {
+      status: authFailure ? "failed" : "unresolved",
+      last_error: message,
+    })
+    return {
+      transaction_id: args.idempotency_key,
+      status: authFailure ? "failed" : "unresolved",
+      message: authFailure
+        ? "myPOS weigerde de aanmelding — controleer de myPOS-sleutels op de Pi."
+        : "Geen antwoord van myPOS — controleer de terminal voor je opnieuw aanslaat.",
+    }
+  }
 
   if (!result.success) {
     logger.error(
       { status: result.status, message: result.statusMessage },
       "myPOS payment create failed",
     )
+    // A network error (-1), a timeout or a 5xx leaves it genuinely open
+    // whether myPOS armed the terminal. Anything else is a refusal, and a
+    // refusal creates nothing.
+    const ambiguous =
+      result.status === -1 || result.status === 408 || result.status >= 500
     updateIntent(args.idempotency_key, {
-      status: "failed",
+      status: ambiguous ? "unresolved" : "failed",
+      status_code: String(result.status),
       last_error: `${result.status}: ${result.statusMessage}`,
     })
-    throw new Error(`mypos_start_failed_${result.status}`)
+    return {
+      transaction_id: args.idempotency_key,
+      status: ambiguous ? "unresolved" : "failed",
+      message: ambiguous
+        ? "Geen antwoord van myPOS — controleer de terminal voor je opnieuw aanslaat."
+        : startFailureText(result.status, result.statusMessage),
+    }
   }
 
   const status = normalizeStatus(result.status)
@@ -230,9 +420,16 @@ export async function startMyPosTransaction(
   return { transaction_id: result.paymentId, status }
 }
 
-export async function pollMyPosStatus(
-  handle: string,
-): Promise<{ status: NormalizedStatus; code: string | null; raw: unknown }> {
+export interface MyPosPollResult {
+  status: NormalizedStatus
+  code: string | null
+  raw: unknown
+  /** Pending for so long that waiting is no longer the right thing to do. */
+  stale?: boolean
+  message?: string
+}
+
+export async function pollMyPosStatus(handle: string): Promise<MyPosPollResult> {
   const row = findIntent(handle)
   if (!row) throw new Error("mypos_unknown_transaction")
 
@@ -245,8 +442,44 @@ export async function pollMyPosStatus(
     }
   }
 
+  // The uplink was down when we started this one. Every poll is a chance to
+  // find out what actually happened, so the kassa recovers by itself once the
+  // connection is back instead of needing a restart.
+  if (row.status === "unresolved") {
+    const found = await reconcileIntent(row)
+    if (found.outcome === "found") {
+      updateIntent(row.idempotency_key, {
+        transaction_id: found.paymentId,
+        status: found.status,
+        status_code: found.code,
+        last_error: null,
+      })
+      if (found.status === "approved") await captureOnce(row.idempotency_key)
+      return { status: found.status, code: found.code, raw: found }
+    }
+    if (found.outcome === "absent") {
+      // Nothing was ever created, so nothing can have been charged. Free the
+      // key; the next tap on "opnieuw proberen" starts a real payment.
+      dropIntent(row.idempotency_key)
+      return {
+        status: "failed",
+        code: row.status_code,
+        raw: { reconciled: "absent" },
+        message: "De betaling is myPOS nooit bereikt — probeer opnieuw of reken contant af.",
+      }
+    }
+    return {
+      status: "unresolved",
+      code: row.status_code,
+      raw: { reconciled: "unknown", error: row.last_error },
+      message:
+        "Nog steeds geen verbinding met myPOS — controleer de terminal voor je opnieuw aanslaat.",
+    }
+  }
+
+  const stale = Date.now() - row.created_at > STALE_PENDING_MS
   const paymentId = row.transaction_id
-  if (!paymentId) return { status: "pending", code: null, raw: {} }
+  if (!paymentId) return { status: "pending", code: null, raw: {}, stale }
 
   const result = await client().epos.payments.get(paymentId)
   if (!result.success) {
@@ -255,14 +488,68 @@ export async function pollMyPosStatus(
       { status: result.status, message: result.statusMessage },
       "myPOS status poll failed",
     )
-    return { status: "pending", code: null, raw: { error: result.statusMessage } }
+    return {
+      status: "pending",
+      code: null,
+      raw: { error: result.statusMessage },
+      stale,
+    }
   }
 
   const status = normalizeStatus(result.status)
   updateIntent(row.idempotency_key, { status, status_code: result.status })
   if (status === "approved") await captureOnce(row.idempotency_key)
 
-  return { status, code: result.status, raw: result }
+  return {
+    status,
+    code: result.status,
+    raw: result,
+    stale: status === "pending" ? stale : false,
+    message:
+      status === "pending" && stale
+        ? "De terminal reageert al een tijd niet — kijk op de terminal wat er staat."
+        : undefined,
+  }
+}
+
+/**
+ * Take the amount off the terminal when the operator gives up. Without this an
+ * abandoned PIN stays armed: the customer taps minutes later, the card is
+ * charged, and the order has meanwhile been booked as cash.
+ */
+export async function cancelMyPosTransaction(
+  handle: string,
+): Promise<{ cancelled: boolean; status: NormalizedStatus; message?: string }> {
+  const row = findIntent(handle)
+  if (!row) throw new Error("mypos_unknown_transaction")
+
+  if (row.status === "approved") {
+    return {
+      cancelled: false,
+      status: "approved",
+      message: "Al goedgekeurd — annuleren kan niet meer, gebruik een refund.",
+    }
+  }
+  if (!row.transaction_id) {
+    dropIntent(row.idempotency_key)
+    return { cancelled: true, status: "failed" }
+  }
+
+  const result = await client().epos.payments.cancel(row.transaction_id)
+  if (!result.success) {
+    logger.warn(
+      { status: result.status, message: result.statusMessage },
+      "myPOS cancel failed",
+    )
+    return {
+      cancelled: false,
+      status: row.status as NormalizedStatus,
+      message: "Annuleren lukte niet — controleer de terminal.",
+    }
+  }
+
+  updateIntent(row.idempotency_key, { status: "declined", status_code: "cancelled" })
+  return { cancelled: true, status: "declined" }
 }
 
 export async function refundMyPos(

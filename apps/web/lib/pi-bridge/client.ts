@@ -83,25 +83,62 @@ export function updateOrderStateViaPi(payload: {
   })
 }
 
-// The Pi normalises both myPOS transports (cloud REST and LAN/ECR) onto this
-// vocabulary, so the kassa never has to know which one is configured.
-export type MyPosStatus = "pending" | "approved" | "declined" | "failed"
+// The Pi normalises the myPOS transport onto this vocabulary, so the kassa
+// never has to know how the terminal is driven.
+//
+// `unresolved` is not a soft pending: the Pi could not establish whether myPOS
+// received the payment at all. The kassa must hand the decision to a human
+// instead of retrying or booking it as unpaid.
+export type MyPosStatus =
+  | "pending"
+  | "approved"
+  | "declined"
+  | "failed"
+  | "unresolved"
 
 export function startMyPosViaPi(payload: {
   idempotency_key: string
   amount_cents: number
   order_id: string
 }) {
-  return call<{ transaction_id: string; status: MyPosStatus; reused?: boolean }>(
-    "/mypos/start",
-    { method: "POST", body: JSON.stringify(payload) },
-  )
+  // Unlike the other Pi calls this one waits on myPOS over the internet, so
+  // the default 2s budget does not apply. Aborting early would be worse than
+  // waiting: the Pi would still arm the terminal while the kassa reported a
+  // failure. The Pi keeps an intent row per key, so a retry after a timeout
+  // picks the same transaction back up instead of starting a second one.
+  return call<{
+    transaction_id: string
+    status: MyPosStatus
+    reused?: boolean
+    message?: string
+  }>("/mypos/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    timeoutMs: 20_000,
+  })
 }
 
 export function pollMyPosViaPi(transaction_id: string) {
-  return call<{ status: MyPosStatus; code: string | null; raw: unknown }>(
-    `/mypos/status/${encodeURIComponent(transaction_id)}`,
-    { method: "GET" },
+  return call<{
+    status: MyPosStatus
+    code: string | null
+    raw: unknown
+    stale?: boolean
+    message?: string
+  }>(`/mypos/status/${encodeURIComponent(transaction_id)}`, {
+    method: "GET",
+    timeoutMs: 8_000,
+  })
+}
+
+export function cancelMyPosViaPi(transaction_id: string) {
+  return call<{ cancelled: boolean; status: MyPosStatus; message?: string }>(
+    "/mypos/cancel",
+    {
+      method: "POST",
+      body: JSON.stringify({ transaction_id }),
+      timeoutMs: 10_000,
+    },
   )
 }
 

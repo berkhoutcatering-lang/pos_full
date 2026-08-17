@@ -1,5 +1,14 @@
 # Hop & Bites terminal-app
 
+> **Stilgelegd per 2026-08-17.** De eis dat de Pi geen internet heeft is
+> losgelaten: de Pi hangt aan WiFi en pinnen loopt via de myPOS ePOS API
+> (`MYPOS_TRANSPORT=cloud`). Deze app lost daarmee een probleem op dat we niet
+> meer hebben, en kost per codewijziging 1–3 werkdagen reviewtijd bij myPOS.
+>
+> Hij is af en bouwt, en blijft staan voor het geval de cloud-route alsnog
+> dichtgaat. Alles hieronder klopt nog; er wordt alleen niet aan doorgewerkt.
+> Zie `raspberry-pos-os/smoke/MYPOS-OVERDRACHT.md` voor de afweging.
+
 Android-app die **op de myPOS Ultra zelf** draait, zodat de kassa kan pinnen
 zonder eigen internetverbinding.
 
@@ -16,42 +25,88 @@ Pi (geen internet)
                         └── myPOS Smart SDK ──> autorisatie via SIM
 ```
 
-## Status: onvolledig, bouwt nog niet
+## Protocol
 
-Dit is een scaffold, geen werkende app. Bewust gecommit zodat het werk niet
-verloren gaat, maar draai het niet zonder eerst af te maken.
+Alle verzoeken behalve `/health` dragen `X-Signature`: een HMAC-SHA256 (hex) over
+de body bij POST, of over de querystring bij GET, met de koppelsleutel die op het
+terminalscherm staat. Zonder die sleutel kan alles op het truck-WiFi een
+betaalscherm openen.
 
-Wat er is:
+| Route                             | Antwoord                                                        |
+| --------------------------------- | --------------------------------------------------------------- |
+| `GET /health`                     | `{ok, version, paired}` — ongetekend, zodat de kassa kan ontdekken |
+| `POST /payment`                   | `{status, reused}` — body: `idempotency_key`, `amount_cents`, `reference` |
+| `GET /payment?key=<idempotency>`  | `{status, code, message, stale}`                                  |
 
-- `BridgeService.kt` — HTTP-server op poort 8080, HMAC-ondertekende requests,
-  `/health`, `POST /payment`, `GET /payment?key=...`
-- `PaymentActivity.kt` — onzichtbare activity die de Smart SDK-betaling host
-  (de SDK levert zijn resultaat via `onActivityResult`, dus dat kan niet vanuit
-  een service)
-- `PaymentStore.kt` — idempotency op de kassasleutel, zodat een herhaald verzoek
-  niet twee keer afrekent
+`status` is `pending`, `approved`, `declined` of `failed`.
 
-Wat ontbreekt:
+**`stale` is het veld dat je niet moet negeren.** Als een betaling langer dan drie
+minuten op `pending` staat, is er iets misgegaan tussen deze app en de myPOS-app.
+We raden dan níet: de kassa hoort "controleer de terminal" te tonen en de
+medewerker beslist. Een kaart die wél belast is maar als onbetaald wordt geboekt,
+is erger dan een trage checkout.
 
-- **`MainActivity`** — het manifest verwijst ernaar, het bestand bestaat niet.
-  Hierdoor compileert het project niet.
-- **Gradle wrapper** (`gradlew`, `gradle/wrapper/`)
-- Een scherm om het gedeelde geheim en het poortnummer in te stellen
-- Elke vorm van testen op echte hardware
+Herhaalde `POST /payment` met dezelfde `idempotency_key` levert de bestaande
+betaling op (`reused: true`) en start er géén tweede. De uitkomst wordt naar
+`filesDir/payments.json` weggeschreven vóórdat de call terugkeert, dus een
+goedgekeurde betaling overleeft het wegvallen van het proces.
 
-## De echte blokkade
+## Bouwen
+
+```bash
+cd apps/terminal-app && ./gradlew assembleRelease
+```
+
+Vereist JDK 17 (de JBR van Android Studio voldoet) en Android SDK 34. Levert
+`app/build/outputs/apk/release/app-release-unsigned.apk`.
+
+Dat die APK ongetekend is, is geen omissie: myPOS ondertekent zelf bij
+distributie (zie hieronder), dus dit ís het bestand dat je uploadt.
+
+## Op de terminal krijgen
 
 Sideloaden op een productie-Ultra wordt geweigerd:
 
 ```
-INSTALL_PARSE_FAILED_CERTIFICATE_ENCODING: PosAuth failed:
-Failed to collect certificates from /data/app/.../base.apk
+INSTALL_PARSE_FAILED_CERTIFICATE_ENCODING: PosAuth failed
 ```
 
-myPOS accepteert alleen apps die met een geautoriseerd certificaat zijn
-ondertekend. Dit afmaken heeft dus pas zin als myPOS ons ondertekeningscertificaat
-autoriseert, of als we een demo-terminal krijgen — dat is stap 2 van de
-integratie-checklist in het Partner Portal.
+Dat is geen bug en geen ontbrekende toestemming op ons certificaat: myPOS
+ondertekent apps zélf met hun PCI Certification Key bij distributie. Zelf
+ondertekenen kan principieel nooit werken. Er zijn twee wegen:
+
+1. **Developer-terminal.** Demo-account via het Partner Portal
+   ("Create (Demo) Account"), testtoestel via `sales@mypos.com`. Daarop werkt
+   `adb install` wel. Dit is de enige manier om snel te itereren.
+2. **Test-AppMarket.** Je stuurt de APK naar je myPOS-contact, die zet hem in de
+   testomgeving, en je installeert hem op je eigen Ultra via de AppMarket-app.
+
+Voor productie: indienen bij AppMarket met de **TID Allow List** gevuld met
+alleen `80561740`. Daarmee is de app onzichtbaar voor iedere andere myPOS-klant —
+dat is de bedoelde weg voor eigen en klant-specifieke uitrol, niet een omweg.
+Reactietermijn op een inzending is 1–3 werkdagen.
+
+## Netwerkopstelling — één ding niet verkeerd doen
+
+De Ultra hangt aan het AP van de Pi, dat geen internet heeft. Android merkt dat
+en houdt mobiele data als default-route voor internetverkeer, terwijl
+`10.42.0.0/24` direct bereikbaar blijft via WiFi. Precies wat we willen.
+
+**Ga daarom Android's connectiviteitscheck niet faken op de Pi** om het
+uitroeptekentje bij het WiFi-icoon weg te krijgen. Dan denkt Android dat die
+WiFi internet heeft, routeert het de autorisatie daarheen, en faalt elke
+transactie.
+
+## Wat er nog niet is
+
+Beide punten zijn blijven liggen toen de cloud-route werd gekozen; ze staan hier
+zodat duidelijk is wat er nog moet gebeuren als deze app ooit weer opgepakt
+wordt.
+
+- De `terminal`-transport aan de Pi-kant (`apps/pi-bridge`, naast `off` en
+  `cloud`). Dit is de tegenkant van bovenstaand protocol.
+- Testen op echte hardware — kan pas zodra de app via een van de twee wegen
+  hierboven op een toestel staat.
 
 Zie `raspberry-pos-os/smoke/MYPOS-OVERDRACHT.md` voor de volledige stand van
-zaken.
+zaken rond myPOS.

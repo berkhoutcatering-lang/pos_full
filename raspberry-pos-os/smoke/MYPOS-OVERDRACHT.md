@@ -11,13 +11,15 @@ Ik bouw een eigen kassasysteem voor mijn foodtruck (Hop & Bites). Ik wil dat een
 medewerker op het kassascherm op **PIN** drukt en dat het bedrag direct op mijn
 **myPOS Ultra** verschijnt, draadloos.
 
-**De harde eis:** de kassa (een Raspberry Pi in de truck) heeft **geen
-internetverbinding**. Alleen de terminal is online, via zijn eigen simkaart. Ik
-wil dus dat de kassa de terminal over het lokale netwerk aanstuurt, en dat de
-terminal de kaart zelf autoriseert via zijn SIM.
+**~~De harde eis~~ — vervallen per 2026-08-17.** De oorspronkelijke eis was dat
+de kassa (een Raspberry Pi in de truck) **geen internetverbinding** heeft:
+alleen de terminal online via zijn eigen simkaart, en de kassa die de terminal
+over het lokale netwerk aanstuurt.
 
-Een 4G-router of hotspot is een noodoplossing die ik liever niet neem, maar wel
-overweeg als het echt niet anders kan.
+Die eis is losgelaten. Geen van de lokale routes bleek begaanbaar (zie
+hieronder), en de Pi mag nu gewoon op WiFi. Daarmee is **de ePOS-cloud-API de
+gekozen route**. De rest van de kassa blijft wel offline-first: alleen pinnen
+heeft de uplink nodig.
 
 ## Mijn opstelling
 
@@ -47,8 +49,7 @@ overweeg als het echt niet anders kan.
   gedraaid. Die stuurt exact hetzelfde frame en krijgt **timeout**. Het ligt dus
   niet aan mijn implementatie — de terminal antwoordt niemand.
 - Ook getest en dicht: USB serieel (COM-poort verschijnt, geen antwoord),
-  ADB shell (geweigerd), sideloaden van een eigen app
-  (`PosAuth failed`, handtekening niet geautoriseerd).
+  ADB shell (geweigerd), sideloaden van een eigen app (`PosAuth failed`).
 - **Vermoedelijke oorzaak:** myPOS' eigen troubleshootinggids zegt *"on some
   accounts, Cash Register mode activation requires manual enablement by the
   myPOS support team"*. Alle andere voorwaarden uit die gids zijn afgevinkt
@@ -71,11 +72,55 @@ overweeg als het echt niet anders kan.
 
 ## Waar het op wacht
 
-Twee vragen liggen bij myPOS (`integrations@mypos.com`), concept staat in
-`raspberry-pos-os/smoke/MYPOS-SUPPORT-VRAAG.md`:
+**Gekozen richting per 2026-08-17: de ePOS-cloud-API.** De Pi hangt aan WiFi
+met internet en roept de myPOS API Gateway aan; myPOS duwt het bedrag naar de
+Ultra, die de kaart via zijn eigen SIM autoriseert.
 
-1. Cash Register (ECR) modus vrijschakelen op mijn account.
-2. Waarom geeft `POST /epos/v1/payments` een 403, en welk recht ontbreekt?
+Dat pad is geïmplementeerd en getest tot aan de openstaande 403 hieronder:
+`apps/pi-bridge/src/services/mypos-proxy.ts` (inclusief herstel na een
+weggevallen verbinding), `POST /mypos/start|status|cancel|refund`, en de
+kassa-flow in `apps/web/app/(pos)/pos/components/checkout-pin.tsx`.
+
+**Het enige dat nu nog blokkeert is de HTTP 403 op `POST /epos/v1/payments`.**
+Onbeproefd spoor: de troubleshootinggids eist dat **POSLink Manager** draait
+met *Pair Type* expliciet op **EPOS mode**. Die app is eerder terzijde
+geschoven als "verkeerd" — dat klopt voor de LAN-route, maar niet voor ePOS.
+Test daarna met `node apps/pi-bridge/scripts/mypos-pay.mjs --pay 0.01`.
+
+**De eigen app op de Ultra (`apps/terminal-app/`) ligt stil.** Hij is af en
+bouwt, maar hij lost een probleem op dat we niet meer hebben, en hij kost per
+codewijziging een reviewcyclus van 1–3 werkdagen bij myPOS. Bewaard voor het
+geval de cloud-route alsnog dicht blijkt. Wat daarvoor nodig was:
+
+`PosAuth failed` was géén ontbrekende toestemming op ons certificaat. myPOS
+ondertekent apps zélf met hun PCI Certification Key bij distributie — hun eigen
+troubleshootinggids zegt letterlijk *"Upload an unsigned release APK — myPOS
+applies the correct signature during distribution."* Zelf ondertekenen kan dus
+principieel nooit werken; daar is niets aan te repareren.
+
+De weg naar binnen loopt via AppMarket, en dat hoeft niet publiek: de
+upload-pagina heeft een **TID Allow List** ("Add terminal IDs if the app should
+be visible only on specific POS devices"). Alleen `80561740` erin en de app is
+voor niemand anders zichtbaar.
+
+Aan te vragen bij myPOS (`online@mypos.com`, niet `integrations@`):
+
+1. Een demo-developer-account — het Partner Portal heeft "Create (Demo) Account"
+   naast de gewone.
+2. Een testtoestel via `sales@mypos.com`. Op een developer-terminal werkt
+   `adb install` wél. Zonder dat zit elke codewijziging vast aan een
+   reviewcyclus van 1–3 werkdagen.
+3. Alternatief zonder testtoestel: APK naar je myPOS-contact, die zet hem in de
+   test-AppMarket, en je installeert hem op de eigen Ultra via de AppMarket-app.
+
+**Waarom de LAN/ECR-route is losgelaten**, ook als support hem vrijschakelt: in
+IPP STAGE 4 kan de terminal de kassa gebruiken als netwerkpad naar de myPOS-host.
+Als de Ultra dat doet heeft de Pi alsnog internet nodig en vervalt het hele
+offline-voordeel. Dagen wachten op een vrijschakeling voor een route die de eis
+misschien niet eens haalt, is niet de moeite.
+
+De oude vraag over `POST /epos/v1/payments` → 403 is daarmee geen zijspoor meer
+maar **het** openstaande punt: zonder dat werkt pinnen niet.
 
 ## Wat er in de codebase staat
 
@@ -89,10 +134,10 @@ Twee vragen liggen bij myPOS (`integrations@mypos.com`), concept staat in
 - `raspberry-pos-os/smoke/mypos-ipp-probe.mjs` — IPP-codec en probe voor de
   LAN-route. Werkt zodra de terminal antwoordt.
 - `raspberry-pos-os/smoke/mypos-ecr-probe.mjs` — poortscan en protocol-fingerprint.
-- `apps/terminal-app/` — half afgebouwde Android-app die op de terminal zou
-  draaien (myPOS Smart SDK + HTTP-server op het LAN). Dit is de enige route die
-  écht zonder internet werkt, maar vereist dat myPOS mijn
-  ondertekeningscertificaat autoriseert.
+- `apps/terminal-app/` — Android-app die op de terminal draait (myPOS Smart SDK
+  + HTTP-server op het LAN). De enige route die écht zonder internet werkt,
+  maar sinds 2026-08-17 stilgelegd ten gunste van de cloud-API. **Af en bouwt**
+  (`./gradlew assembleRelease`); zie de README daar.
 - `raspberry-pos-os/README.md` — sectie "myPOS PIN-terminal (Ultra)" met de
   volledige status.
 
