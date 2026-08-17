@@ -25,7 +25,6 @@ function Test-Service {
 Write-Host "Health check:" -ForegroundColor Cyan
 Test-Service "pi-bridge-public" "http://localhost:3001/_health" | Out-Null
 Test-Service "mock-mypos" "http://localhost:8081/mockserver/status" "PUT" | Out-Null
-Test-Service "mock-mollie" "http://localhost:8082/mockserver/status" "PUT" | Out-Null
 
 try {
     $tcp = New-Object System.Net.Sockets.TcpClient

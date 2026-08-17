@@ -16,7 +16,7 @@ Get-ChildItem supabase\migrations\*.sql | Sort-Object Name | ForEach-Object {
 }
 
 Write-Host "[3/4] Building + starting Docker test stack..." -ForegroundColor Cyan
-docker compose -f docker-compose.test.yml up -d --build pi-bridge mock-mypos mock-mollie mock-printer
+docker compose -f docker-compose.test.yml up -d --build pi-bridge mock-mypos mock-printer
 
 Write-Host "[4/4] Waiting for healthchecks (max 90s)..." -ForegroundColor Cyan
 $deadline = (Get-Date).AddSeconds(90)

@@ -81,14 +81,13 @@ jobs:
         run: supabase start
 
       - name: Bring up Docker test stack
-        run: docker compose -f docker-compose.test.yml up -d --build pi-bridge mock-mypos mock-mollie mock-printer
+        run: docker compose -f docker-compose.test.yml up -d --build pi-bridge mock-mypos mock-printer
 
       - name: Wait for healthchecks
         run: |
           for i in 1 2 3 4 5 6 7 8 9 10; do
             if curl -fsS http://localhost:3001/_health > /dev/null \
-               && curl -fsS -X PUT http://localhost:8081/mockserver/status > /dev/null \
-               && curl -fsS -X PUT http://localhost:8082/mockserver/status > /dev/null; then
+               && curl -fsS -X PUT http://localhost:8081/mockserver/status > /dev/null; then
               echo "All services healthy"; exit 0
             fi
             sleep 5
