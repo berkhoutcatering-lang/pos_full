@@ -1,0 +1,16 @@
+# The build stage copies real node_modules out of the deps stage and only then
+# does `COPY . .`. Without this file the host's pnpm node_modules — a tree of
+# symlinks — lands on top of it and the build dies with:
+#   cannot replace to directory /app/node_modules/@electric-sql/pglite with file
+# That only happens when something installed deps first (CI does), which is why
+# it stayed hidden in the standalone image build.
+node_modules
+dist
+
+# Local runtime state and secrets must never end up in the image.
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+.env
+.env.*
+*.log
