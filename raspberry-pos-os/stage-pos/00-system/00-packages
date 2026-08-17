@@ -15,3 +15,7 @@ rpi-connect-lite
 nginx-light
 dnsmasq-base
 libnss3-tools
+# USB-tethering vanaf een telefoon is de uplink in de truck. Android werkt op
+# in-kernel drivers (rndis_host / cdc_ncm), een iPhone heeft usbmuxd nodig om
+# het ipheth-apparaat te laten verschijnen.
+usbmuxd

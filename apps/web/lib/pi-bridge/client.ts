@@ -142,6 +142,30 @@ export function cancelMyPosViaPi(transaction_id: string) {
   )
 }
 
+// Whether the PI has internet — a different question from whether this tablet
+// does. The tablet sits on the Pi's access point and can be perfectly happy
+// while the Pi is cut off from myPOS.
+export type UplinkState = "online" | "portal" | "no_internet" | "down"
+
+export interface UplinkStatus {
+  state: UplinkState
+  interface: string | null
+  kind: "usb" | "ethernet" | "wifi" | "unknown"
+  mypos_reachable: boolean
+  clock_synced: boolean
+  message: string
+  checked_at: number
+}
+
+export function uplinkViaPi(force = false) {
+  return call<UplinkStatus>(`/uplink${force ? "?force=1" : ""}`, {
+    method: "GET",
+    // The Pi probes the network before answering, so this outlives the 2s
+    // default meant for calls it can serve from its own memory.
+    timeoutMs: 9_000,
+  })
+}
+
 export interface PrintKitchenPayload {
   idempotency_key: string
   order_id: string

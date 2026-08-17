@@ -33,7 +33,7 @@ tijdens de dienst.** Het image bevat:
 | Ingelogd blijven | ✅ offline-identity cookie + lokale claims-cache (30 dagen) |
 | Opnieuw inloggen (zelfde account) | ✅ lokale wachtwoord-verificatie (argon2-cache, 30 dagen) — werkt per account nadat het één keer online op deze Pi inlogde |
 | **Allereerste login van een account** | ❌ Supabase Auth heeft éénmalig internet nodig per account |
-| PIN (myPOS) | ❌ de pi-bridge gaat via de myPOS ePOS API en heeft dus internet op de Pi nodig (WiFi volstaat). Een LAN-route zonder internet is uitgezocht en werkt niet — zie [myPOS PIN-terminal (Ultra)](#mypos-pin-terminal-ultra) |
+| PIN (myPOS) | ❌ de pi-bridge gaat via de myPOS ePOS API en heeft dus internet op de Pi nodig — in de praktijk een telefoon aan de USB-poort, zie [Internet in de truck](#internet-in-de-truck). Een LAN-route zonder internet is uitgezocht en werkt niet |
 | Supabase-sync, dagafsluiting-data, AI | ⏳ zodra er weer internet is (ethernet/tethering) flusht de outbox |
 
 ## Image bouwen
@@ -102,6 +102,48 @@ herstart de Pi.
 
 > **Let op:** wijzig je later `SUPABASE_URL`/`SUPABASE_ANON_KEY`, wis dan op
 > de tablets de sitedata (de service worker cachet de oude bundle).
+
+## Internet in de truck
+
+Alleen pinnen heeft internet nodig; de rest van de kassa draait volledig
+lokaal. De werkwijze is overal hetzelfde:
+
+**Telefoon aan de USB-poort, USB-tethering aan.** Meer is het niet.
+
+- Android: *Instellingen → Verbindingen → Mobiele hotspot en tethering →
+  USB-tethering*
+- iPhone: *Persoonlijke hotspot* aan, kabel erin, en op de telefoon
+  **Vertrouwen** aantikken (het image heeft `usbmuxd` aan boord, anders ziet
+  Linux een iPhone niet als netwerkapparaat)
+
+De Pi pakt de verbinding vanzelf op. Zijn eigen WiFi-netwerk blijft gewoon in
+de lucht, dus de schermen hoeven niet over en de telefoon laadt ondertussen op.
+
+Waarom niet gewoon het WiFi van het terrein? Omdat `wlan0` niet tegelijk
+access point kan zijn én ergens op inloggen — de Pi heeft één radio. Zou je
+overstappen, dan verdwijnt het netwerk waar je kassa, KDS en CFD op zitten.
+Daar komt bij dat gast-WiFi vrijwel altijd verkeer tussen apparaten blokkeert
+en achter een inlogpagina zit waar een headless Pi niet doorheen klikt.
+
+### Zien of het werkt
+
+In **/admin** staat bovenaan een kaart met de echte status, gemeten vanaf de
+Pi zelf: via welke verbinding het binnenkomt, of myPOS bereikbaar is, en of er
+een inlogpagina tussen zit. Die laatste is het geval dat mensen erin laat
+lopen — je bent verbonden, je hebt een IP, en er gaat niets doorheen.
+
+Zonder app kan het ook:
+
+```bash
+curl -k -H "x-admin-token: <token>" https://hopbites.local:3001/_health
+```
+
+Daar staan `uplink_state`, `uplink_kind`, `mypos_reachable` en `clock_synced`
+in. Die laatste is geen detail: de Pi heeft geen batterijklok, dus na een lange
+periode uit loopt de tijd weg en falen TLS-verbindingen naar myPOS tot NTP
+gesynct heeft. Dat lost zichzelf binnen een minuut op zodra er internet is.
+
+`STATUS.txt` op de bootpartitie toont bij elke start dezelfde regel.
 
 ## myPOS PIN-terminal (Ultra)
 

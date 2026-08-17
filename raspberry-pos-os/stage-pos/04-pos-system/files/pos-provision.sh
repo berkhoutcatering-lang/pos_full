@@ -242,20 +242,39 @@ case "${MYPOS_TRANSPORT}" in
     ;;
 esac
 
+# ---------- 6b. uplink: waar komt het internet vandaan? ----------
+# De standaardwerkwijze in de truck is USB-tethering vanaf een telefoon. Dat
+# apparaat heet op de ene Android usb0 en op de andere enx<mac>, wat qua naam
+# niet te onderscheiden is van een echte netwerkkaart — vandaar dat we naar het
+# pad onder /sys kijken en niet naar de naam.
+UPLINK_IF="$(ip -4 route show default 2>/dev/null | awk '/^default/ {print $5; exit}')"
+UPLINK_KIND="geen"
+if [ -n "${UPLINK_IF}" ]; then
+  case "${UPLINK_IF}" in
+    wlan*|wlp*) UPLINK_KIND="wifi" ;;
+    *)
+      if readlink -f "/sys/class/net/${UPLINK_IF}" 2>/dev/null | grep -q '/usb'; then
+        UPLINK_KIND="usb"
+      else
+        UPLINK_KIND="ethernet"
+      fi
+      ;;
+  esac
+fi
+
+case "${UPLINK_KIND}" in
+  usb)      UPLINK_LINE="via USB-tethering (${UPLINK_IF})" ;;
+  ethernet) UPLINK_LINE="via netwerkkabel (${UPLINK_IF})" ;;
+  wifi)     UPLINK_LINE="via WiFi (${UPLINK_IF})" ;;
+  *)        UPLINK_LINE="geen uplink op het moment van opstarten" ;;
+esac
+
 # PIN over de ePOS-API is een HTTPS-aanroep vanaf de Pi. In AP-modus is wlan0
 # bezet met uitzenden, dus dan moet het internet ergens anders vandaan komen.
-# Draait er geen kabel in, dan lukt geen enkele PIN-betaling en dat hoort de
-# gebruiker te lezen vóór de eerste klant aan de balie staat.
-if [ "${MYPOS_OK}" = 1 ] && [ "${AP_ACTIVE}" = 1 ]; then
-  WIRED_UP=0
-  for c in /sys/class/net/*/carrier; do
-    ifn=$(basename "$(dirname "${c}")")
-    case "${ifn}" in wlan*|lo) continue ;; esac
-    [ "$(cat "${c}" 2>/dev/null)" = "1" ] && WIRED_UP=1
-  done
-  if [ "${WIRED_UP}" = 0 ]; then
-    WARNINGS+=("MYPOS_TRANSPORT=cloud met een eigen access point (AP_SSID), maar geen bekabelde uplink — PIN heeft internet nodig. Sluit ethernet/USB-tethering aan, of laat de Pi met WIFI_SSID op een netwerk mét internet zitten.")
-  fi
+# Zit er niets, dan lukt geen enkele PIN-betaling en dat hoort de gebruiker te
+# lezen vóór de eerste klant aan de balie staat.
+if [ "${MYPOS_OK}" = 1 ] && [ "${AP_ACTIVE}" = 1 ] && [ "${UPLINK_KIND}" = "geen" ]; then
+  WARNINGS+=("MYPOS_TRANSPORT=cloud met een eigen access point (AP_SSID), maar geen uplink — PIN heeft internet nodig. Sluit een telefoon aan met USB-tethering (of een netwerkkabel). Dit kan ook na het opstarten; kijk in /admin of het internet er is.")
 fi
 
 # De web-app draait op de Pi zelf: sta die origins standaard toe richting
@@ -435,6 +454,7 @@ FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/n
     echo "Access point: uit (zet AP_SSID + AP_PASS in pos.env voor een eigen netwerk zonder internet)"
   fi
   echo "IP-adressen:  $(hostname -I 2>/dev/null)"
+  echo "Internet:     ${UPLINK_LINE}"
   echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo "geconfigureerd (${MYPOS_MODE})" || echo 'NIET geconfigureerd')"
   echo "Printer:      ${PRINTER_TYPE} @ ${PRINTER_NETWORK_ADDR}"
   echo "Kiosk:        ${KIOSK_URL:-uit}"

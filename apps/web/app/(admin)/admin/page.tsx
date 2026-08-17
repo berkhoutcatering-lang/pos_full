@@ -4,6 +4,7 @@ import { computeZReport } from "@/lib/dal/dagafsluiting"
 import { computeDashboardActivity } from "@/lib/dal/dashboard"
 import { PageHead } from "@/components/admin/page-head"
 import { StatCard } from "@/components/admin/stat-card"
+import { UplinkCard } from "@/components/admin/uplink-card"
 import { euroCents } from "@/lib/format"
 
 export const dynamic = "force-dynamic"
@@ -59,6 +60,12 @@ export default async function AdminDashboardPage() {
         title="Dashboard"
         sub="Live omzet en activiteit van deze locatie."
       />
+
+      {/* Boven de omzetcijfers: als PIN het niet doet wil je dat zien voordat
+          je naar de cijfers kijkt, niet erna. */}
+      <div className="mb-4">
+        <UplinkCard />
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatCard

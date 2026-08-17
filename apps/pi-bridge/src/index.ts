@@ -18,6 +18,7 @@ import { adminOperationalRoutes } from "./routes/admin-operational.js"
 import { outboxPendingRoutes } from "./routes/outbox-pending.js"
 import { menuAdminRoutes } from "./routes/menu-admin.js"
 import { displayRoutes } from "./routes/display.js"
+import { uplinkRoutes } from "./routes/uplink.js"
 import { startOutboxFlushWorker } from "./workers/outbox-flush.js"
 import { startPgliteWarmer } from "./workers/pglite-warmer.js"
 import { startJwtRotationWatcher } from "./workers/jwt-rotation-watcher.js"
@@ -77,6 +78,7 @@ await app.register(adminOperationalRoutes)
 await app.register(outboxPendingRoutes)
 await app.register(menuAdminRoutes)
 await app.register(displayRoutes)
+await app.register(uplinkRoutes)
 
 // Capture unhandled route errors to Sentry (no-op without DSN).
 Sentry.setupFastifyErrorHandler(app)
