@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hop &amp; Bites Bridge</string>
+
+    <string name="screen_title">Kassa-koppeling</string>
+    <string name="screen_subtitle">De kassa stuurt betalingen naar deze terminal. De terminal betaalt af via zijn eigen simkaart.</string>
+
+    <string name="state_listening">Verbonden</string>
+    <string name="state_no_network">Geen netwerk</string>
+    <string name="state_stopped">Gestopt</string>
+
+    <string name="address_heading">Adres voor de kassa</string>
+    <string name="address_value">%1$s : %2$d</string>
+    <string name="address_unknown">Nog geen IP-adres — sluit de terminal aan op het kassa-netwerk.</string>
+
+    <string name="secret_heading">Koppelsleutel</string>
+    <string name="secret_hint">Voer deze sleutel in op de kassa, zonder de spaties.</string>
+    <string name="regenerate">Nieuwe sleutel</string>
+    <string name="regenerate_title">Nieuwe sleutel maken?</string>
+    <string name="regenerate_message">De kassa kan daarna geen betalingen meer starten totdat je de nieuwe sleutel daar invoert. Doe dit alleen als de oude sleutel bij iemand anders bekend is.</string>
+    <string name="regenerate_confirm">Vervangen</string>
+    <string name="cancel">Annuleren</string>
+
+    <string name="payments_heading">Laatste betalingen</string>
+    <string name="payments_empty">Nog geen betalingen.</string>
+    <string name="amount">€ %1$d,%2$02d</string>
+
+    <string name="status_pending">Bezig</string>
+    <string name="status_stale">Controleer</string>
+    <string name="status_approved">Gelukt</string>
+    <string name="status_declined">Geweigerd</string>
+    <string name="status_failed">Mislukt</string>
+
+    <string name="notification_title">Kassa-koppeling actief</string>
+    <string name="notification_text">Luistert op poort %1$d</string>
+    <string name="notification_channel">Kassa-koppeling</string>
+</resources>

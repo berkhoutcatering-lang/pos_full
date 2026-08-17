@@ -1,0 +1,5 @@
+# Gradle's own scratch state for this project. `build/` is already covered by
+# the repo-root .gitignore; this file is here for what is Gradle-specific.
+.gradle/
+local.properties
+*.apk

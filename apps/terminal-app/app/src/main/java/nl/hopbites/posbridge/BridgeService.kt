@@ -3,11 +3,13 @@ package nl.hopbites.posbridge
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
+import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.OutputStream
@@ -44,9 +46,13 @@ class BridgeService : Service() {
         private const val CHANNEL_ID = "hopbites_bridge"
         private const val PRUNE_AFTER_MS = 24L * 60 * 60 * 1000
 
-        /** Shared secret, set once from MainActivity. */
-        fun secret(ctx: Context): String =
-            ctx.getSharedPreferences("bridge", Context.MODE_PRIVATE).getString("secret", "").orEmpty()
+        /** Whether the accept loop is up, for the status screen. */
+        @Volatile var isRunning = false
+            private set
+
+        fun start(ctx: Context) {
+            ContextCompat.startForegroundService(ctx, Intent(ctx, BridgeService::class.java))
+        }
     }
 
     private var server: ServerSocket? = null
@@ -57,6 +63,7 @@ class BridgeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        PaymentStore.init(applicationContext)
         startForeground(1, buildNotification())
         running = true
         Thread(::serve, "bridge-accept").start()
@@ -66,6 +73,7 @@ class BridgeService : Service() {
 
     override fun onDestroy() {
         running = false
+        isRunning = false
         runCatching { server?.close() }
         pool.shutdownNow()
         super.onDestroy()
@@ -77,9 +85,16 @@ class BridgeService : Service() {
             NotificationChannel(CHANNEL_ID, "Kassa-koppeling", NotificationManager.IMPORTANCE_LOW)
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Hop & Bites kassa-koppeling")
-            .setContentText("Luistert op poort $PORT")
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_text, PORT))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    this, 0,
+                    Intent(this, MainActivity::class.java),
+                    PendingIntent.FLAG_IMMUTABLE
+                )
+            )
             .setOngoing(true)
             .build()
     }
@@ -87,6 +102,7 @@ class BridgeService : Service() {
     private fun serve() {
         try {
             server = ServerSocket(PORT)
+            isRunning = true
             Log.i(TAG, "Listening on $PORT")
             while (running) {
                 val socket = server!!.accept()
@@ -94,6 +110,8 @@ class BridgeService : Service() {
             }
         } catch (e: Exception) {
             if (running) Log.e(TAG, "Accept loop stopped", e)
+        } finally {
+            isRunning = false
         }
     }
 
@@ -164,11 +182,19 @@ class BridgeService : Service() {
 
     private fun route(req: Request, out: OutputStream) {
         if (req.path == "/health" && req.method == "GET") {
-            respond(out, 200, JSONObject().put("ok", true).put("version", "0.1.0"))
+            // Unsigned on purpose: this is how the kassa discovers the terminal
+            // and how an operator checks the link before it has been paired.
+            respond(
+                out, 200,
+                JSONObject()
+                    .put("ok", true)
+                    .put("version", BuildConfig.VERSION_NAME)
+                    .put("paired", Pairing.secret(this).isNotEmpty())
+            )
             return
         }
 
-        val secret = secret(this)
+        val secret = Pairing.secret(this)
         if (secret.isEmpty()) {
             respond(out, 503, JSONObject().put("error", "not_configured"))
             return
@@ -240,6 +266,12 @@ class BridgeService : Service() {
                 .put("status", payment.status.name.lowercase())
                 .put("code", payment.code ?: JSONObject.NULL)
                 .put("message", payment.message ?: JSONObject.NULL)
+                // A payment that has been pending too long means something went
+                // wrong between here and the myPOS app. We never guess an
+                // outcome — the kassa shows "controleer de terminal" and the
+                // operator decides, because a charged card reported as unpaid
+                // is worse than a slow checkout.
+                .put("stale", payment.isStale)
         )
     }
 

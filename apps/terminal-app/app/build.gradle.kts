@@ -11,9 +11,15 @@ android {
         applicationId = "nl.hopbites.posbridge"
         // myPOS' integration checklist asks for Android 8.0+.
         minSdk = 26
-        targetSdk = 33
+        targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
+    }
+
+    buildFeatures {
+        // AGP 8 stopped generating BuildConfig unless asked; /health reports the
+        // version so the kassa can tell which build a terminal is running.
+        buildConfig = true
     }
 
     buildTypes {
@@ -26,9 +32,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "17"
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 

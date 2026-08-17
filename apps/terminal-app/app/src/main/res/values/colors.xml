@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#C8641E</color>
+    <color name="brand_dark">#9E4C13</color>
+
+    <color name="ink">#17140F</color>
+    <color name="muted">#6B6257</color>
+    <color name="hairline">#E4DCD1</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="background">#F6F2EC</color>
+
+    <color name="ok">#1F7A45</color>
+    <color name="warn">#B3261E</color>
+    <color name="neutral">#6B6257</color>
+
+    <color name="on_pill">#FFFFFF</color>
+</resources>
