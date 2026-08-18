@@ -62,6 +62,13 @@ const ConfigSchema = z.object({
   PRINTER_NETWORK_ADDR: z.string().default("192.168.1.50"),
   PRINTER_TYPE: z.enum(["star", "epson"]).default("star"),
 
+  // Logo bovenaan de klantbon. Het bestand komt van de bootpartitie
+  // (pos-setup/logo.png); ontbreekt het, dan print de bon gewoon zonder.
+  RECEIPT_LOGO_PATH: z.string().default("/etc/pi-bridge/receipt-logo.png"),
+  // Printkop in dots: 384 bij een 58mm-rol, 576 bij 80mm. Een breder logo
+  // wordt door de printer afgekapt, dus hier waarschuwen we erover.
+  PRINTER_DOT_WIDTH: z.coerce.number().int().positive().default(576),
+
   // SQLite
   SQLITE_PATH: z.string().default("/data/pi-bridge.sqlite"),
 

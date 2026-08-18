@@ -116,6 +116,15 @@ piDb.exec(`
     updated_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS mypos_refund_intents_txn ON mypos_refund_intents(transaction_id);
+
+  -- Bedrijfsgegevens voor op de kassabon, gespiegeld uit Supabase. De bon
+  -- moet ook zonder internet kloppen, dus de Pi print uit deze kopie en
+  -- ververst hem op de achtergrond. Eén rij, want een Pi hoort bij een venue.
+  CREATE TABLE IF NOT EXISTS receipt_settings (
+    venue_id TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    cached_at INTEGER NOT NULL
+  );
 `)
 
 // Additive migrations for databases created before a column existed. SQLite has

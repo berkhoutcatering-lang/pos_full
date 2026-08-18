@@ -23,6 +23,10 @@ const KitchenSchema = z.object({
     .max(50),
 })
 
+// De bedrijfsgegevens zaten hier vroeger in de body. Dat betekende dat elke
+// caller ze moest weten, en in de praktijk stonden ze hardcoded met een
+// verzonnen KvK-nummer. De Pi weet zelf bij welke zaak hij hoort; hij haalt ze
+// uit pos_receipt_settings.
 const CustomerSchema = z.object({
   idempotency_key: z.string().regex(ULID_RE),
   order_id: z.string().uuid(),
@@ -33,15 +37,20 @@ const CustomerSchema = z.object({
       qty: z.number().int().positive(),
       price_cents: z.number().int().nonnegative(),
       btw_rate: z.number().nonnegative().max(100),
+      // Exacte splitsing uit de pricing-engine, zodat het BTW-blok op de bon
+      // tot op de cent optelt naar het totaal. Optioneel: zonder deze velden
+      // rekent de printer het zelf terug.
+      line_excl_cents: z.number().int().nonnegative().optional(),
+      line_btw_cents: z.number().int().nonnegative().optional(),
+      line_incl_cents: z.number().int().nonnegative().optional(),
     }),
   ),
   total_excl_cents: z.number().int().nonnegative(),
   total_btw_cents: z.number().int().nonnegative(),
   total_incl_cents: z.number().int().nonnegative(),
-  paid_method: z.enum(["cash", "pin", "ideal"]),
-  org_name: z.string().max(80),
-  org_kvk: z.string().max(20),
-  org_btw: z.string().max(20),
+  // Ontbreekt op een Z-rapport: dat is geen betaling.
+  paid_method: z.enum(["cash", "pin", "ideal"]).optional(),
+  title: z.string().max(64).optional(),
 })
 
 export async function printRoutes(app: FastifyInstance) {

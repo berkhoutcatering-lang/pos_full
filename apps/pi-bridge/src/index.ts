@@ -19,8 +19,10 @@ import { outboxPendingRoutes } from "./routes/outbox-pending.js"
 import { menuAdminRoutes } from "./routes/menu-admin.js"
 import { displayRoutes } from "./routes/display.js"
 import { uplinkRoutes } from "./routes/uplink.js"
+import { receiptSettingsRoutes } from "./routes/receipt-settings.js"
 import { startOutboxFlushWorker } from "./workers/outbox-flush.js"
 import { startPgliteWarmer } from "./workers/pglite-warmer.js"
+import { startReceiptSettingsWarmer } from "./services/receipt-settings.js"
 import { startJwtRotationWatcher } from "./workers/jwt-rotation-watcher.js"
 import { startMdnsAdvertise } from "./services/mdns.js"
 
@@ -79,12 +81,14 @@ await app.register(outboxPendingRoutes)
 await app.register(menuAdminRoutes)
 await app.register(displayRoutes)
 await app.register(uplinkRoutes)
+await app.register(receiptSettingsRoutes)
 
 // Capture unhandled route errors to Sentry (no-op without DSN).
 Sentry.setupFastifyErrorHandler(app)
 
 startOutboxFlushWorker()
 startPgliteWarmer()
+startReceiptSettingsWarmer()
 startJwtRotationWatcher()
 await startMdnsAdvertise()
 

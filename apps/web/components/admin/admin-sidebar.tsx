@@ -42,6 +42,7 @@ const NAV: NavItem[] = [
   { type: "head", label: "Beheer" },
   { type: "link", href: "/admin/menu", label: "Menu", Icon: BookOpen },
   { type: "link", href: "/admin/staff", label: "Personeel", Icon: Users },
+  { type: "link", href: "/admin/bon", label: "Kassabon", Icon: ReceiptText },
   { type: "link", href: "/admin/theme", label: "Thema", Icon: Palette },
   { type: "link", href: "/admin/usage", label: "AI-gebruik", Icon: Sparkles },
   { type: "link", href: "/admin/audit", label: "Audit log", Icon: ScrollText },

@@ -206,6 +206,24 @@ fi
 # Always export the CA for tablets, so it survives re-flashing pos-setup/.
 cp -f "${TLS_DIR}/ca.crt" "${SETUP_DIR}/hopbites-ca.crt" 2>/dev/null
 
+# ---------- 5b. logo voor op de kassabon ----------
+# Zet pos-setup/logo.png op de bootpartitie (vanaf Windows/macOS te doen) en
+# hij komt bovenaan de klantbon. Een thermische printer print zwart-wit op
+# printkopbreedte: 384 dots bij een 58mm-rol, 576 bij 80mm. Breder wordt
+# afgekapt, kleur wordt modder — dus lever een monochroom PNG aan.
+LOGO_SRC="${SETUP_DIR}/logo.png"
+LOGO_DST=/etc/pi-bridge/receipt-logo.png
+if [ -f "${LOGO_SRC}" ]; then
+  if ! cmp -s "${LOGO_SRC}" "${LOGO_DST}" 2>/dev/null; then
+    install -m 644 -o root -g posbridge "${LOGO_SRC}" "${LOGO_DST}"       || WARNINGS+=("Logo kopiëren naar ${LOGO_DST} faalde")
+  fi
+  LOGO_LINE="pos-setup/logo.png"
+else
+  # Weggehaald van de bootpartitie = weg van de bon.
+  rm -f "${LOGO_DST}"
+  LOGO_LINE="geen (zet logo.png in deze map)"
+fi
+
 # ---------- 6. validate + compose /etc/pi-bridge/env ----------
 UUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 [[ "${ORG_ID}" =~ ${UUID_RE} ]] || ERRORS+=("ORG_ID ontbreekt of is geen geldige UUID")
@@ -457,6 +475,7 @@ FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/n
   echo "Internet:     ${UPLINK_LINE}"
   echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo "geconfigureerd (${MYPOS_MODE})" || echo 'NIET geconfigureerd')"
   echo "Printer:      ${PRINTER_TYPE} @ ${PRINTER_NETWORK_ADDR}"
+  echo "Bonlogo:      ${LOGO_LINE}"
   echo "Kiosk:        ${KIOSK_URL:-uit}"
   if [ "${ENABLE_RPI_CONNECT}" = "1" ]; then
     echo "Pi Connect:   aan — eenmalig koppelen: ssh ${POS_USER}@${HN}.local en dan 'rpi-connect signin'"

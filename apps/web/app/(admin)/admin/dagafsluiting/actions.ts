@@ -107,10 +107,10 @@ export async function closeDayAction(
       total_excl_cents: report.total_excl_cents,
       total_btw_cents: report.total_btw_cents,
       total_incl_cents: report.total_incl_cents,
-      paid_method: "cash",
-      org_name: "Hop & Bites",
-      org_kvk: "12345678",
-      org_btw: "NL000000000B01",
+      // Geen paid_method: een Z-rapport is geen betaling, en "Betaald ·
+      // Contant" onderaan de dagomzet klopte gewoon niet. De Pi vult de
+      // bedrijfsgegevens zelf aan uit pos_receipt_settings.
+      title: `Z-rapport ${parsed.data.date}`,
     }),
     signal: AbortSignal.timeout(3000),
   }).catch(() => {

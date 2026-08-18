@@ -180,18 +180,29 @@ export function printKitchenViaPi(payload: PrintKitchenPayload) {
   )
 }
 
+// Geen bedrijfsgegevens meer in deze payload: de Pi weet zelf bij welke zaak
+// hij hoort en haalt naam/KvK/BTW uit pos_receipt_settings. Toen de kassa ze
+// meestuurde stonden ze hardcoded, met een verzonnen KvK-nummer op elke bon.
 export interface PrintReceiptPayload {
   idempotency_key: string
   order_id: string
   order_label: string
-  items: Array<{ name: string; qty: number; price_cents: number; btw_rate: number }>
+  items: Array<{
+    name: string
+    qty: number
+    price_cents: number
+    btw_rate: number
+    // De exacte splitsing uit de pricing-engine, zodat het BTW-blok per tarief
+    // tot op de cent optelt naar het totaal.
+    line_excl_cents?: number
+    line_btw_cents?: number
+    line_incl_cents?: number
+  }>
   total_excl_cents: number
   total_btw_cents: number
   total_incl_cents: number
-  paid_method: "cash" | "pin" | "ideal"
-  org_name: string
-  org_kvk: string
-  org_btw: string
+  paid_method?: "cash" | "pin" | "ideal"
+  title?: string
 }
 
 export function printReceiptViaPi(payload: PrintReceiptPayload) {

@@ -185,14 +185,16 @@ export function PaymentOverlay({
         price_cents:
           it.unit_price_cents + Math.round(it.modifier_total_cents / it.qty),
         btw_rate: btwRateFor(it.menu_item.btw_class),
+        // De pricing-engine heeft al afgerond; door die bedragen mee te sturen
+        // telt het BTW-blok per tarief op de bon exact op naar het totaal.
+        line_excl_cents: it.line_excl_cents,
+        line_btw_cents: it.line_btw_cents,
+        line_incl_cents: it.line_incl_cents,
       })),
       total_excl_cents: priced.total_excl_cents,
       total_btw_cents: priced.total_btw_cents,
       total_incl_cents: priced.total_incl_cents,
       paid_method: method,
-      org_name: "Hop & Bites",
-      org_kvk: "12345678",
-      org_btw: "NL000000000B01",
     })
 
     return { ok: true }

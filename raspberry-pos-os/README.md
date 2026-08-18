@@ -103,6 +103,68 @@ herstart de Pi.
 > **Let op:** wijzig je later `SUPABASE_URL`/`SUPABASE_ANON_KEY`, wis dan op
 > de tablets de sitedata (de service worker cachet de oude bundle).
 
+## De kassabon
+
+De Pi print twee bonnen: een **keukenbon** (afroepnummer, items, modifiers,
+notities) en een **klantbon**. De myPOS Ultra print daarnaast zijn eigen
+transactiebon voor de PIN-betaling — die komt uit myPOS' software, niet uit
+deze.
+
+Op de klantbon staat:
+
+```
+          [ logo ]
+        Hop & Bites
+       Marktplein 1
+      1234 AB Amsterdam
+       KvK 12345678
+     BTW NL001234567B01
+------------------------------------------------
+Bon A-014
+17-08-2026 14:32:10
+------------------------------------------------
+2x Pulled pork broodje              EUR 19.00
+1x Speciaalbier                     EUR  5.50
+------------------------------------------------
+Subtotaal excl. BTW                 EUR 21.98
+BTW 9% over EUR 17.43               EUR  1.57
+BTW 21% over EUR 4.55               EUR  0.95
+TOTAAL                              EUR 24.50
+------------------------------------------------
+        Betaald · PIN / contactloos
+
+     Bedankt en tot ziens!
+        hopandbites.nl
+```
+
+### Bedrijfsgegevens
+
+Invullen via **/admin → Kassabon**, per locatie. Elk veld mag leeg blijven en
+leeg betekent "die regel niet printen" — liever een bon zonder KvK-nummer dan
+een bon met een KvK-nummer dat niet bestaat.
+
+De Pi print uit zijn eigen kopie van die gegevens, zodat de bon ook zonder
+internet klopt. Opslaan duwt de wijziging meteen naar de Pi; is die net even
+weg, dan pakt hij het binnen vijf minuten alsnog op.
+
+### Logo
+
+Zet een `logo.png` in de map `pos-setup` op de bootpartitie (vanaf Windows of
+macOS na het flashen). Bij de eerstvolgende start staat hij op de bon.
+
+Een thermische printer print zwart-wit op printkopbreedte, dus lever een
+**monochroom PNG** aan van hoogstens **384 pixels breed** bij een 58mm-rol of
+**576** bij 80mm. Breder wordt door de printer afgekapt — dat ziet eruit als
+een kapot logo, dus de bridge zet een waarschuwing in het log als je bestand te
+breed is. Weghalen van de bootpartitie betekent geen logo meer.
+
+Het uitvinkje in /admin zet alleen het printen uit; het bestand blijft staan.
+
+> Dit is iets anders dan het logo dat je in het **myPOS merchant-portaal**
+> uploadt. Dat verschijnt op de transactiebon van de terminal zelf en op
+> myPOS' eigen betaalpagina's. De twee staan los van elkaar en je wilt ze
+> waarschijnlijk allebei invullen.
+
 ## Internet in de truck
 
 Alleen pinnen heeft internet nodig; de rest van de kassa draait volledig
