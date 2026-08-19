@@ -37,6 +37,30 @@ function terminal() {
   return { host: config.MYPOS_TERMINAL_HOST!, port: config.MYPOS_TERMINAL_PORT }
 }
 
+/** When we last saw the terminal answer, so we know the link is warm. */
+let lastContactAt = 0
+
+/** How long a confirmed link stays warm before we hand-shake again. */
+const LINK_WARM_MS = 60_000
+
+/**
+ * Say hello before arming a payment.
+ *
+ * The first connection after a quiet period is spent on the terminal's own
+ * handshake — it shows "All set! Now you can use it" and swallows whatever we
+ * sent in that session, so the customer never sees the amount. A PING is the
+ * cheapest way to get that out of the way: it is read-only, it completes in a
+ * fraction of a second, and it doubles as proof the terminal is reachable
+ * before we tell the kassa a payment is running.
+ */
+async function ensureLink(): Promise<void> {
+  if (Date.now() - lastContactAt < LINK_WARM_MS) return
+
+  const ping = runIppMethod({ ...terminal(), method: "PING" })
+  await ping.done
+  lastContactAt = Date.now()
+}
+
 /**
  * Map an IPP status onto our vocabulary. The distinction that matters is
  * "nothing happened" versus "we do not know" — a terminal that lost the host
@@ -130,6 +154,7 @@ async function settleFinalFrame(key: string, final: IppFields) {
   const status = Number(final.STATUS)
   const { normalized, message } = classify(status, final.TX_STATUS)
   const receipt = receiptFields(final)
+  lastContactAt = Date.now()
 
   updateIntent(key, {
     status: normalized,
@@ -162,6 +187,7 @@ export async function startLanTransaction(
 
   let session: IppSession
   try {
+    await ensureLink()
     session = runIppMethod({
       ...terminal(),
       method: "PURCHASE",
@@ -169,7 +195,7 @@ export async function startLanTransaction(
         ["AMOUNT", formatAmount(args.amount_cents)],
         ["CURRENCY", "978"],
         ["FIXED_PINPAD", "1"],
-        ["LANG", "NL"],
+        ["LANG", config.MYPOS_TERMINAL_LANG],
         ["OPERATOR_CODE", config.MYPOS_OPERATOR_CODE],
         // Echoed back on the final frame, so an order stays traceable from the
         // terminal's own journal without our database.

@@ -47,6 +47,10 @@ const ConfigSchema = z.object({
   // Manager (Settings -> Edit port) and is not the same on every device.
   MYPOS_TERMINAL_HOST: optionalSecret,
   MYPOS_TERMINAL_PORT: z.coerce.number().int().positive().default(7901),
+  // Language of the prompts on the terminal. EN is the only value we have
+  // seen a real Ultra accept; NL is untested and an unsupported value comes
+  // back as STATUS=3 (UNSUPPORTED PARAM) instead of a payment.
+  MYPOS_TERMINAL_LANG: z.string().length(2).default("EN"),
 
   // demo-api-gateway.mypos.com while testing, api-gateway.mypos.com for real
   // money. The SDK exports both as DEMO_GATEWAY_URL / PRODUCTION_GATEWAY_URL.
