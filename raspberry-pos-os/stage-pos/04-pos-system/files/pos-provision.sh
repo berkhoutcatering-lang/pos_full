@@ -60,6 +60,7 @@ MYPOS_TID="" MYPOS_OPERATOR_CODE="1"
 PRINTER_NETWORK_ADDR="192.168.1.50" PRINTER_TYPE="star"
 POS_HOSTNAME="hopbites" WIFI_SSID="" WIFI_PASS="" WIFI_COUNTRY="NL"
 AP_SSID="" AP_PASS="" AP_BAND="bg" AP_CHANNEL="6" AP_IP="10.42.0.1"
+MYPOS_TERMINAL_HOST="" MYPOS_TERMINAL_PORT="7901"
 KIOSK_URL="" ALLOWED_ORIGINS="" MDNS_INTERFACE="" SENTRY_DSN=""
 ENABLE_RPI_CONNECT="0"
 set -a
@@ -252,11 +253,22 @@ case "${MYPOS_TRANSPORT}" in
       MYPOS_MODE="cloud"
     fi
     ;;
+  lan)
+    # De Pi praat rechtstreeks met de terminal over IPP; alleen adres en poort
+    # nodig, geen enkele sleutel. Poort staat in POSLink Manager onder
+    # Settings -> Edit port en verschilt per toestel.
+    if [ -z "${MYPOS_TERMINAL_HOST}" ]; then
+      WARNINGS+=("MYPOS_TRANSPORT=lan maar MYPOS_TERMINAL_HOST ontbreekt — PIN uitgeschakeld.")
+    else
+      MYPOS_OK=1
+      MYPOS_MODE="lan"
+    fi
+    ;;
   off|"")
     WARNINGS+=("myPOS staat uit (MYPOS_TRANSPORT=off) — PIN-betalingen zijn uitgeschakeld.")
     ;;
   *)
-    WARNINGS+=("MYPOS_TRANSPORT='${MYPOS_TRANSPORT}' is ongeldig (kies off of cloud) — PIN uitgeschakeld.")
+    WARNINGS+=("MYPOS_TRANSPORT='${MYPOS_TRANSPORT}' is ongeldig (kies off, lan of cloud) — PIN uitgeschakeld.")
     ;;
 esac
 
@@ -291,7 +303,7 @@ esac
 # bezet met uitzenden, dus dan moet het internet ergens anders vandaan komen.
 # Zit er niets, dan lukt geen enkele PIN-betaling en dat hoort de gebruiker te
 # lezen vóór de eerste klant aan de balie staat.
-if [ "${MYPOS_OK}" = 1 ] && [ "${AP_ACTIVE}" = 1 ] && [ "${UPLINK_KIND}" = "geen" ]; then
+if [ "${MYPOS_MODE}" = "cloud" ] && [ "${AP_ACTIVE}" = 1 ] && [ "${UPLINK_KIND}" = "geen" ]; then
   WARNINGS+=("MYPOS_TRANSPORT=cloud met een eigen access point (AP_SSID), maar geen uplink — PIN heeft internet nodig. Sluit een telefoon aan met USB-tethering (of een netwerkkabel). Dit kan ook na het opstarten; kijk in /admin of het internet er is.")
 fi
 
@@ -317,6 +329,11 @@ umask 027
   # compleet zijn. Alleen de keys van de actieve transport worden weggeschreven;
   # de pi-bridge valideert per modus en start dus ook zonder myPOS-config.
   echo "MYPOS_TRANSPORT=${MYPOS_MODE}"
+  if [ "${MYPOS_MODE}" = "lan" ]; then
+    echo "MYPOS_TERMINAL_HOST=${MYPOS_TERMINAL_HOST}"
+    echo "MYPOS_TERMINAL_PORT=${MYPOS_TERMINAL_PORT:-7901}"
+    echo "MYPOS_OPERATOR_CODE=${MYPOS_OPERATOR_CODE}"
+  fi
   if [ "${MYPOS_MODE}" = "cloud" ]; then
     echo "MYPOS_GATEWAY_URL=${MYPOS_GATEWAY_URL}"
     echo "MYPOS_PARTNER_ID=${MYPOS_PARTNER_ID}"
@@ -473,7 +490,11 @@ FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/n
   fi
   echo "IP-adressen:  $(hostname -I 2>/dev/null)"
   echo "Internet:     ${UPLINK_LINE}"
-  echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo "geconfigureerd (${MYPOS_MODE})" || echo 'NIET geconfigureerd')"
+  if [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "lan" ]; then
+    echo "myPOS PIN:    geconfigureerd (lan) — terminal op ${MYPOS_TERMINAL_HOST}:${MYPOS_TERMINAL_PORT:-7901}"
+  else
+    echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo "geconfigureerd (${MYPOS_MODE})" || echo 'NIET geconfigureerd')"
+  fi
   echo "Printer:      ${PRINTER_TYPE} @ ${PRINTER_NETWORK_ADDR}"
   echo "Bonlogo:      ${LOGO_LINE}"
   echo "Kiosk:        ${KIOSK_URL:-uit}"
