@@ -133,7 +133,7 @@ export function startConnectionPolling() {
   }
 
   // Cloud check uses navigator.onLine as a coarse signal + a tiny GET to
-  // the same-origin /api/_ping. Browsers always set navigator.onLine to
+  // the same-origin /api/ping. Browsers always set navigator.onLine to
   // true on captive-portal networks, so we trust the round-trip.
   const tickCloud = async () => {
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -141,7 +141,7 @@ export function startConnectionPolling() {
       return
     }
     try {
-      const res = await fetch(`/api/_ping`, {
+      const res = await fetch(`/api/ping`, {
         method: "GET",
         signal: AbortSignal.timeout(3000),
         cache: "no-store",
