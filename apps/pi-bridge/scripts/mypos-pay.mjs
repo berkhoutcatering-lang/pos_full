@@ -9,13 +9,20 @@
 //   node scripts/mypos-pay.mjs --terminals
 //   node scripts/mypos-pay.mjs --pay 0.01
 //
-// Sleutels via de omgeving (zie .env.example):
+// Sleutels komen uit een .env-bestand (zie .env.example):
 //   MYPOS_GATEWAY_URL, MYPOS_PARTNER_ID, MYPOS_APPLICATION_ID,
 //   MYPOS_INTEGRATION_CLIENT_ID, MYPOS_INTEGRATION_CLIENT_SECRET,
 //   MYPOS_MERCHANT_CLIENT_ID, MYPOS_MERCHANT_CLIENT_SECRET, MYPOS_TID
+//
+// Gezocht wordt apps/pi-bridge/.env en daarna de .env in de repo-root; met
+// --env <pad> wijs je er zelf een aan. Staat een variabele al in de omgeving,
+// dan wint die — zo blijft een eenmalige override vanaf de shell mogelijk.
 
 import { MyPOSGateway } from "mypos-api-gateway"
 import crypto from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 const args = {}
 for (let i = 2; i < process.argv.length; i++) {
@@ -24,6 +31,95 @@ for (let i = 2; i < process.argv.length; i++) {
   const next = process.argv[i + 1]
   if (next === undefined || next.startsWith("--")) args[a.slice(2)] = true
   else { args[a.slice(2)] = next; i++ }
+}
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const packageRoot = path.resolve(scriptDir, "..")
+const repoRoot = path.resolve(packageRoot, "..", "..")
+
+/**
+ * Minimale .env-lezer — geen dependency, want die heeft dit pakket verder ook
+ * niet. Alleen `KEY=waarde`; aanhalingstekens eromheen gaan eraf.
+ *
+ * Hij klaagt hardop over twee dingen, omdat een .env die met de hand is
+ * geplakt daar in de praktijk op stukgaat en het gevolg anders pas als een
+ * onbegrijpelijke HTTP-fout terugkomt:
+ *
+ *  - een regel zonder `=` na een toewijzing: de waarde is over meerdere regels
+ *    afgebroken, en dan laadt alleen het eerste stuk. Een half secret ziet er
+ *    in de foutmelding uit als een geweigerde sleutel.
+ *  - een tweede `KEY=` middenin een waarde: hier zijn twee regels aan elkaar
+ *    geplakt, dus de ene variabele is te lang en de andere bestaat niet.
+ */
+function readEnvFile(file) {
+  const values = {}
+  const problems = []
+  const lines = fs.readFileSync(file, "utf8").split(/\r?\n/)
+  let lastWasAssignment = false
+
+  lines.forEach((line, index) => {
+    const lineNo = index + 1
+    const trimmed = line.trim()
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      lastWasAssignment = false
+      return
+    }
+
+    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/.exec(line)
+    if (!match) {
+      if (lastWasAssignment) {
+        problems.push(`regel ${lineNo}: hoort bij de waarde erboven maar staat op een eigen regel`)
+      } else {
+        problems.push(`regel ${lineNo}: geen KEY=waarde en geen comment`)
+      }
+      return
+    }
+
+    lastWasAssignment = true
+    const key = match[1]
+    let value = match[2].trim()
+    const quoted = /^(["'])(.*)\1$/.exec(value)
+    if (quoted) value = quoted[2]
+
+    // Alleen HOOFDLETTER-namen, anders slaat hij aan op de waarde zelf en
+    // echoot hij een stuk van een secret mee in de waarschuwing.
+    const glued = /[A-Z][A-Z0-9_]{2,}=/.exec(value)
+    if (glued) {
+      problems.push(
+        `regel ${lineNo}: de waarde van ${key} bevat "${glued[0]}" — hier zijn twee regels aan elkaar geplakt`,
+      )
+    }
+
+    values[key] = value
+  })
+
+  return { values, problems }
+}
+
+const envPath = (() => {
+  if (typeof args.env === "string") return path.resolve(args.env)
+  for (const candidate of [path.join(packageRoot, ".env"), path.join(repoRoot, ".env")]) {
+    if (fs.existsSync(candidate)) return candidate
+  }
+  return null
+})()
+
+if (envPath && fs.existsSync(envPath)) {
+  const { values, problems } = readEnvFile(envPath)
+  console.log(`Sleutels uit ${path.relative(process.cwd(), envPath) || envPath}`)
+  for (const p of problems) console.warn(`  LET OP  ${p}`)
+  // De omgeving wint, zodat een override vanaf de shell blijft werken.
+  for (const [k, v] of Object.entries(values)) {
+    if (process.env[k] === undefined) process.env[k] = v
+  }
+} else if (typeof args.env === "string") {
+  console.error(`\nGeen .env gevonden op ${path.resolve(args.env)}\n`)
+  process.exit(1)
+} else {
+  console.warn(
+    `\nGeen .env gevonden in ${packageRoot} of ${repoRoot} — ` +
+      `ik val terug op wat er in de omgeving staat.\n`,
+  )
 }
 
 const need = [
@@ -37,16 +133,16 @@ const need = [
 const missing = need.filter((k) => !process.env[k])
 if (missing.length) {
   console.error(`
-Ontbrekende omgevingsvariabelen:
+Ontbrekende sleutels${envPath ? ` in ${envPath}` : ""}:
 ${missing.map((m) => `  ${m}`).join("\n")}
+
+Staat de regel er wel in, kijk dan of hij niet is afgebroken of vastgeplakt
+aan de regel erboven — daar waarschuw ik hierboven over.
 
 Op partners.mypos.com bij je Smart POS-integratie:
   Summary  -> Partner ID (mps-p-...) en Application ID (mps-app-...)
            -> Generate API Credentials  -> client_... en secret_...
   Merchants -> merchant koppelen        -> cli_... en sec_...
-
-Zet ze in je shell (PowerShell):
-  $env:MYPOS_PARTNER_ID = 'mps-p-...'
 `)
   process.exit(1)
 }
@@ -310,6 +406,8 @@ Gebruik:
   node scripts/mypos-pay.mjs --terminal <TID>       Details en status van een terminal
   node scripts/mypos-pay.mjs --activate             Activatiecode ophalen (tik je op de terminal in)
   node scripts/mypos-pay.mjs --pay 0.01 --tid <TID> Betaling van 1 cent
+
+  --env <pad>   Ander .env-bestand dan apps/pi-bridge/.env of de repo-root
 `)
 }
 
