@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { outboxCounts } from "../db/outbox.js"
 import { config } from "../config.js"
 import { getUplinkStatus } from "../services/uplink.js"
+import { pgCache, pgCacheDurable } from "../db/pglite-cache.js"
 
 // Public liveness for Docker HEALTHCHECK is just `{status:"ok"}`.
 // Detailed health behind x-admin-token so attackers can't fingerprint the
@@ -14,6 +15,14 @@ export async function healthRoute(app: FastifyInstance) {
       // Cached, so `watch curl …/_health` over SSH stays cheap while you plug
       // a phone in and watch it come up.
       const uplink = await getUplinkStatus()
+      // Echt navragen in plaats van "ja hoor": een cache die stilletjes
+      // omvalt hoort hier zichtbaar te zijn.
+      let pgliteOk = true
+      try {
+        await pgCache.query("select 1")
+      } catch {
+        pgliteOk = false
+      }
       return reply.send({
         status: "ok",
         outbox_pending: counts.pending,
@@ -27,7 +36,9 @@ export async function healthRoute(app: FastifyInstance) {
         mypos_terminal_id: config.MYPOS_TID ?? null,
         mypos_gateway:
           config.MYPOS_TRANSPORT === "cloud" ? config.MYPOS_GATEWAY_URL : null,
-        pglite_ok: true,
+        pglite_ok: pgliteOk,
+        // False = read-cache draait in RAM en is na een herstart leeg.
+        pglite_durable: pgCacheDurable,
         venue_id: config.VENUE_ID,
         uptime_s: Math.round(process.uptime()),
       })
