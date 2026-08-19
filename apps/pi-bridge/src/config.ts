@@ -32,13 +32,21 @@ const ConfigSchema = z.object({
   //   off    PIN disabled. Default, and the only safe state until credentials
   //          are filled in: the bridge must still boot so the rest of the POS
   //          works.
+  //   lan    The Pi drives the terminal directly over TCP with myPOS' IPP
+  //          protocol; the terminal authorises over its own SIM. No uplink
+  //          needed on the Pi at all, which is what a foodtruck wants.
   //   cloud  myPOS pushes the amount to the terminal, which authorises over its
   //          own SIM. The Pi needs an uplink for the API call itself.
   //
-  // Driving the terminal directly over the LAN was investigated and does not
-  // work: the terminal ignores unauthorised counterparts on every transport.
-  // See raspberry-pos-os/README.md and the probes in raspberry-pos-os/smoke/.
-  MYPOS_TRANSPORT: z.enum(["off", "cloud"]).default("off"),
+  // The LAN route was long thought impossible (the terminal answered nobody);
+  // it turned out the listener is POSLink Manager with its connection type set
+  // to WIFI (TCP/IP). Confirmed end-to-end on 2026-08-19.
+  MYPOS_TRANSPORT: z.enum(["off", "lan", "cloud"]).default("off"),
+
+  // LAN route: where the terminal listens. Port is configurable in POSLink
+  // Manager (Settings -> Edit port) and is not the same on every device.
+  MYPOS_TERMINAL_HOST: optionalSecret,
+  MYPOS_TERMINAL_PORT: z.coerce.number().int().positive().default(7901),
 
   // demo-api-gateway.mypos.com while testing, api-gateway.mypos.com for real
   // money. The SDK exports both as DEMO_GATEWAY_URL / PRODUCTION_GATEWAY_URL.
@@ -99,6 +107,11 @@ const ConfigSchema = z.object({
         path: [field],
         message: `${field} is required when MYPOS_TRANSPORT=${c.MYPOS_TRANSPORT}`,
       })
+
+    if (c.MYPOS_TRANSPORT === "lan") {
+      if (!c.MYPOS_TERMINAL_HOST) missing("MYPOS_TERMINAL_HOST")
+      return
+    }
 
     if (c.MYPOS_TRANSPORT !== "cloud") return
 

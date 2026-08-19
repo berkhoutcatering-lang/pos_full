@@ -7,6 +7,23 @@ import { config } from "../config.js"
 import { piDb } from "../db/outbox.js"
 import { logger } from "../utils/logger.js"
 import { writeAuditEvent } from "./audit-log.js"
+import {
+  captureOnce,
+  dropIntent,
+  findIntent,
+  insertIntent,
+  updateIntent,
+  STALE_PENDING_MS,
+  type IntentRow,
+  type MyPosStartArgs,
+  type MyPosStartResult,
+  type NormalizedStatus,
+} from "./mypos-intents.js"
+import {
+  cancelLanTransaction,
+  pollLanStatus,
+  startLanTransaction,
+} from "./mypos-lan.js"
 
 // myPOS PIN payments over the ePOS API.
 //
@@ -27,59 +44,10 @@ if (typeof window !== "undefined") {
   throw new Error("mypos-proxy must only be loaded server-side")
 }
 
-/**
- * `unresolved` is the honest answer to "did the card get charged?" when the
- * uplink dropped between our request and myPOS' answer. It is never a silent
- * pending: the kassa must stop and let the operator look at the terminal,
- * because guessing wrong here either charges twice or gives food away.
- */
-export type NormalizedStatus =
-  | "pending"
-  | "approved"
-  | "declined"
-  | "failed"
-  | "unresolved"
-
-export interface MyPosStartArgs {
-  idempotency_key: string
-  amount_cents: number
-  order_id: string
-  venue_id: string
-  actor_terminal_id: string
-}
-
-export interface MyPosStartResult {
-  /** Handle the caller polls with — myPOS' payment id. */
-  transaction_id: string
-  status: NormalizedStatus
-  reused?: boolean
-  /** Set on failed/unresolved: what the operator has to do about it. */
-  message?: string
-}
-
-interface IntentRow {
-  idempotency_key: string
-  transaction_id: string | null
-  status: string
-  amount_cents: number
-  order_id: string
-  venue_id: string
-  actor_terminal_id: string | null
-  captured_at: number | null
-  status_code: string | null
-  last_error: string | null
-  created_at: number
-}
+export type { NormalizedStatus, MyPosStartArgs, MyPosStartResult }
 
 const APP_NAME = "HopBitesPOS"
 const APP_VERSION = "1.0.0"
-
-/**
- * How long a payment may sit on `pending` before the kassa is told to look at
- * the terminal instead of waiting. myPOS expires its own request well after
- * this; three minutes is "the customer has walked off or the app crashed".
- */
-const STALE_PENDING_MS = 3 * 60_000
 
 /** Page size and page budget for reference-number reconciliation. */
 const RECONCILE_PAGE_SIZE = 50
@@ -142,46 +110,6 @@ function startFailureText(status: number, statusMessage: string): string {
     return "myPOS kent dit terminal-ID niet — controleer MYPOS_TID op de Pi."
   }
   return `myPOS weigerde de betaling (${status}: ${statusMessage}) — reken contant af.`
-}
-
-function findIntent(handle: string): IntentRow | undefined {
-  return piDb
-    .prepare(
-      `SELECT * FROM mypos_intents
-       WHERE idempotency_key = ? OR transaction_id = ?
-       LIMIT 1`,
-    )
-    .get(handle, handle) as IntentRow | undefined
-}
-
-/**
- * Drop an intent so the same idempotency key may start a fresh payment. Only
- * ever called once we have proof that myPOS holds nothing under this key.
- */
-function dropIntent(idempotency_key: string) {
-  piDb.prepare("DELETE FROM mypos_intents WHERE idempotency_key = ?").run(idempotency_key)
-}
-
-function updateIntent(
-  idempotency_key: string,
-  patch: {
-    transaction_id?: string | null
-    status?: string
-    status_code?: string | null
-    last_error?: string | null
-  },
-) {
-  const sets: string[] = []
-  const values: unknown[] = []
-  for (const [k, v] of Object.entries(patch)) {
-    sets.push(`${k} = ?`)
-    values.push(v)
-  }
-  sets.push("updated_at = ?")
-  values.push(Date.now(), idempotency_key)
-  piDb
-    .prepare(`UPDATE mypos_intents SET ${sets.join(", ")} WHERE idempotency_key = ?`)
-    .run(...values)
 }
 
 type Reconciled =
@@ -251,36 +179,6 @@ async function reconcileIntent(row: IntentRow): Promise<Reconciled> {
 }
 
 /**
- * Write payment.captured exactly once, at the moment myPOS reports approval.
- * This used to fire when the transaction was *started*, so every abandoned or
- * declined PIN landed in the audit log as a completed payment.
- */
-async function captureOnce(idempotency_key: string) {
-  const row = findIntent(idempotency_key)
-  if (!row || row.captured_at) return
-
-  const claimed = piDb
-    .prepare(
-      "UPDATE mypos_intents SET captured_at = ? WHERE idempotency_key = ? AND captured_at IS NULL",
-    )
-    .run(Date.now(), idempotency_key)
-  // Lost the race with a concurrent poll — the other one writes the event.
-  if (claimed.changes === 0) return
-
-  await writeAuditEvent({
-    event_type: "payment.captured",
-    payload: {
-      order_id: row.order_id,
-      amount_cents: row.amount_cents,
-      method: "pin",
-      mypos_transaction_id: row.transaction_id ?? row.idempotency_key,
-    },
-    actor_terminal_id: row.actor_terminal_id ?? "unknown",
-    venue_id: row.venue_id,
-  })
-}
-
-/**
  * What to hand back for an idempotency key we have seen before — or `null` if
  * the previous attempt provably never reached myPOS, in which case the caller
  * may start over under the same key.
@@ -325,6 +223,7 @@ export async function startMyPosTransaction(
   args: MyPosStartArgs,
 ): Promise<MyPosStartResult> {
   if (config.MYPOS_TRANSPORT === "off") throw new Error("mypos_disabled")
+  if (config.MYPOS_TRANSPORT === "lan") return startLanTransaction(args)
 
   const existing = findIntent(args.idempotency_key)
   if (existing) {
@@ -334,23 +233,7 @@ export async function startMyPosTransaction(
     dropIntent(existing.idempotency_key)
   }
 
-  const now = Date.now()
-  piDb
-    .prepare(
-      `INSERT INTO mypos_intents
-         (idempotency_key, transaction_id, status, amount_cents, order_id, venue_id,
-          actor_terminal_id, created_at, updated_at)
-       VALUES (?, NULL, 'pending', ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      args.idempotency_key,
-      args.amount_cents,
-      args.order_id,
-      args.venue_id,
-      args.actor_terminal_id,
-      now,
-      now,
-    )
+  insertIntent(args)
 
   // The reference number is our idempotency key on purpose: it is the only
   // field myPOS echoes back in the payments list, so it doubles as the handle
@@ -430,6 +313,8 @@ export interface MyPosPollResult {
 }
 
 export async function pollMyPosStatus(handle: string): Promise<MyPosPollResult> {
+  if (config.MYPOS_TRANSPORT === "lan") return pollLanStatus(handle)
+
   const row = findIntent(handle)
   if (!row) throw new Error("mypos_unknown_transaction")
 
@@ -520,6 +405,11 @@ export async function pollMyPosStatus(handle: string): Promise<MyPosPollResult> 
 export async function cancelMyPosTransaction(
   handle: string,
 ): Promise<{ cancelled: boolean; status: NormalizedStatus; message?: string }> {
+  if (config.MYPOS_TRANSPORT === "lan") {
+    const { status, message } = cancelLanTransaction(handle)
+    return { cancelled: true, status, message }
+  }
+
   const row = findIntent(handle)
   if (!row) throw new Error("mypos_unknown_transaction")
 
