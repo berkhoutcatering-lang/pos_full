@@ -17,6 +17,7 @@
 # Draaien op de Pi:
 #   ./mypos-bt.sh scan
 #   ./mypos-bt.sh pair AA:BB:CC:DD:EE:FF
+#   ./mypos-bt.sh discoverable
 #   ./mypos-bt.sh bind AA:BB:CC:DD:EE:FF
 #   ./mypos-bt.sh status
 set -uo pipefail
@@ -50,16 +51,60 @@ case "${CMD}" in
   pair)
     need bluetoothctl
     [ -z "${MAC}" ] && { echo "Gebruik: $0 pair <MAC>" >&2; exit 1; }
-    # Koppelen vraagt meestal een bevestiging op de terminal zelf. Trust zorgt
-    # dat hij daarna zonder tussenkomst opnieuw verbindt na een herstart.
+
+    # Koppelen MOET in één bluetoothctl-sessie. Een agent — het stukje dat de
+    # PIN- of bevestigingsvraag afhandelt — bestaat alleen zolang het proces
+    # draait dat hem registreerde. Losse aanroepen (`bluetoothctl agent on`
+    # gevolgd door `bluetoothctl pair`) laten dus niemand achter om te
+    # antwoorden, en de terminal meldt "verkeerde pin of toegangscode".
     bluetoothctl power on >/dev/null
-    bluetoothctl agent on >/dev/null
-    bluetoothctl default-agent >/dev/null 2>&1
-    echo "== koppelen — kijk op de terminal of hij om een bevestiging vraagt =="
-    bluetoothctl pair "${MAC}"
-    bluetoothctl trust "${MAC}"
-    echo
-    echo "Nu binden: $0 bind ${MAC}"
+    cat <<TXT
+
+Er opent nu een bluetoothctl-sessie. Tik daarin, regel voor regel:
+
+  agent KeyboardDisplay
+  default-agent
+  pairable on
+  pair ${MAC}
+
+Kijk dan op de TERMINAL: hij toont een code of vraagt om bevestiging.
+  - Toont hij een getal en vraagt de Pi 'Confirm passkey?' -> tik yes
+  - Vraagt de Pi 'Enter PIN code:'                        -> neem over wat de
+    terminal toont; heeft hij niets, probeer 0000 en daarna 1234
+
+Daarna nog, in dezelfde sessie:
+
+  trust ${MAC}
+  quit
+
+Lukt koppelen niet omdat de terminal zélf wil zoeken, gebruik dan:
+  $0 discoverable        (maakt de Pi vindbaar, zoek dan vanaf de terminal)
+
+TXT
+    exec bluetoothctl
+    ;;
+
+  discoverable)
+    need bluetoothctl
+    # De andere richting: niet wij zoeken de terminal, maar de terminal zoekt
+    # ons. POSLink Manager heeft in Bluetooth-modus zijn eigen koppelscherm, en
+    # sommige toestellen willen per se zelf het initiatief nemen.
+    bluetoothctl power on >/dev/null
+    cat <<TXT
+
+Er opent nu een bluetoothctl-sessie. Tik daarin:
+
+  agent KeyboardDisplay
+  default-agent
+  discoverable on
+  pairable on
+
+Zoek daarna VANAF de terminal naar deze Pi (hij heet 'hopbites') en koppel
+daar. Bevestig hier wat er gevraagd wordt en laat de sessie open staan tot het
+koppelen klaar is.
+
+TXT
+    exec bluetoothctl
     ;;
 
   bind)
