@@ -346,6 +346,18 @@ if [ "${MYPOS_MODE}" = "cloud" ] && [ "${AP_ACTIVE}" = 1 ] && [ "${UPLINK_KIND}"
   WARNINGS+=("MYPOS_TRANSPORT=cloud met een eigen access point (AP_SSID), maar geen uplink — PIN heeft internet nodig. Sluit een telefoon aan met USB-tethering (of een netwerkkabel). Dit kan ook na het opstarten; kijk in /admin of het internet er is.")
 fi
 
+# En de lan-route heeft het óók nodig, tegen de verwachting in.
+#
+# Het idee was dat de terminal zijn eigen simkaart gebruikt voor de bank, zodat
+# de Pi geen internet hoeft te hebben. In de praktijk (20-8-2026) doet Android
+# dat niet: hangt hij aan een WiFi-netwerk zonder internet, dan stuurt hij het
+# verkeer dáár overheen in plaats van terug te vallen op de sim, en komt er geen
+# transactie doorheen. Zolang de terminal via WiFi aan de Pi hangt, moet het
+# access point dus echt internet doorgeven.
+if [ "${MYPOS_MODE}" = "lan" ] && [ "${AP_ACTIVE}" = 1 ] && [ "${UPLINK_KIND}" = "geen" ]; then
+  WARNINGS+=("Eigen access point zonder uplink: de terminal hangt dan aan WiFi zonder internet en valt niet terug op zijn simkaart — pinnen mislukt. Geef de Pi internet (USB-tethering vanaf een telefoon of een netwerkkabel), of koppel de terminal via USB/Bluetooth in plaats van WiFi zodat hij zijn sim wel gebruikt.")
+fi
+
 # De web-app draait op de Pi zelf: sta die origins standaard toe richting
 # pi-bridge (CORS), naast wat de gebruiker zelf opgeeft.
 LOCAL_ORIGINS="https://${HN}.local,https://hopbites.local,https://pos.lan"
