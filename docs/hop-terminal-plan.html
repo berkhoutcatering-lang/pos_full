@@ -1,0 +1,522 @@
+<title>Hop Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Tokens komen uit apps/web/app/globals.css — dezelfde huisstijl als de kassa.
+     Licht is de basis; donker herdefinieert alleen tokens. */
+  :root {
+    --ground: #F4F1E8;
+    --surface: #FFFFFF;
+    --surface-sunk: #FBF9F2;
+    --ink: #1B201D;
+    --ink-body: #272D29;
+    --ink-muted: #697069;
+    --line: #DDD9CC;
+    --line-strong: #B6BAB0;
+    --accent: #34794D;
+    --accent-tint: #EDF4EC;
+    --amber: #C2851C;
+    --amber-tint: #F6E9CC;
+    --brick: #B64536;
+    --brick-tint: #F4E0DB;
+
+    --measure: 68ch;
+    --step-0: 1.0625rem;
+    --step-1: 1.25rem;
+    --step-2: 1.75rem;
+    --step-3: 2.5rem;
+    --step-4: 3.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #141815;
+      --surface: #1B201D;
+      --surface-sunk: #191E1B;
+      --ink: #F4F1E8;
+      --ink-body: #DCDDD3;
+      --ink-muted: #8C9289;
+      --line: #2F3632;
+      --line-strong: #454D47;
+      --accent: #6FB183;
+      --accent-tint: #1E2C23;
+      --amber: #DFAA4E;
+      --amber-tint: #2C2517;
+      --brick: #D9796A;
+      --brick-tint: #2E1D1A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #141815;
+    --surface: #1B201D;
+    --surface-sunk: #191E1B;
+    --ink: #F4F1E8;
+    --ink-body: #DCDDD3;
+    --ink-muted: #8C9289;
+    --line: #2F3632;
+    --line-strong: #454D47;
+    --accent: #6FB183;
+    --accent-tint: #1E2C23;
+    --amber: #DFAA4E;
+    --amber-tint: #2C2517;
+    --brick: #D9796A;
+    --brick-tint: #2E1D1A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink-body);
+    font-family: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: var(--step-0);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 78ch;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 5vw, 3rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+
+  /* ---------- kop ---------- */
+  .masthead { display: flex; flex-direction: column; gap: 1rem; }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin: 0;
+  }
+
+  h1 {
+    font-size: clamp(var(--step-3), 7vw, var(--step-4));
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    line-height: 1.45;
+    color: var(--ink-body);
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    padding-top: 1rem;
+    border-top: 2px solid var(--ink);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8125rem;
+    color: var(--ink-muted);
+  }
+
+  /* ---------- secties ---------- */
+  section { display: flex; flex-direction: column; gap: 1.25rem; }
+
+  h2 {
+    font-size: var(--step-2);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--line-strong);
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-size: var(--step-1);
+    line-height: 1.25;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  p { margin: 0; max-width: var(--measure); }
+
+  a { color: var(--accent); text-underline-offset: 0.2em; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.9em;
+  }
+
+  code {
+    background: var(--surface-sunk);
+    border: 1px solid var(--line);
+    padding: 0.05em 0.35em;
+  }
+
+  ul { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.5rem; max-width: var(--measure); }
+
+  /* ---------- stroomdiagram ---------- */
+  .flow {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 1.5rem;
+    overflow-x: auto;
+  }
+  .flow svg { display: block; min-width: 520px; width: 100%; height: auto; }
+  .flow-note {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.75rem;
+    color: var(--ink-muted);
+    margin-top: 1rem;
+  }
+
+  /* ---------- tabel ---------- */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 34rem; }
+  th, td {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    font-size: 0.9375rem;
+  }
+  th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    background: var(--surface-sunk);
+    white-space: nowrap;
+  }
+  td:first-child { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.8125rem; white-space: nowrap; color: var(--ink); }
+  tr:last-child td { border-bottom: none; }
+
+  /* ---------- fases ---------- */
+  .phases { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--line-strong); }
+  .phase {
+    display: grid;
+    grid-template-columns: 3.5rem 1fr;
+    gap: 0 1.25rem;
+    padding: 1.5rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .phase-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--accent);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .phase-body { display: flex; flex-direction: column; gap: 0.6rem; }
+  .phase-done {
+    font-size: 0.875rem;
+    color: var(--ink-muted);
+    border-left: 2px solid var(--accent);
+    padding-left: 0.75rem;
+  }
+  .phase-done strong { color: var(--ink); font-weight: 700; }
+
+  /* ---------- kaders ---------- */
+  .callout {
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--amber);
+    background: var(--surface);
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .callout.risk { border-left-color: var(--brick); }
+  .callout.rule { border-left-color: var(--accent); }
+  .callout h3 { font-size: var(--step-0); }
+
+  .risks { display: flex; flex-direction: column; gap: 1rem; }
+
+  .tag {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid currentColor;
+  }
+  .tag.open { color: var(--amber); }
+  .tag.known { color: var(--accent); }
+  .tag.blocker { color: var(--brick); }
+
+  footer {
+    border-top: 2px solid var(--ink);
+    padding-top: 1.25rem;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.8125rem;
+    color: var(--ink-muted);
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Ontwerpplan · 20 augustus 2026</p>
+    <h1>Hop Terminal</h1>
+    <p class="standfirst">Een eigen Android-app op de myPOS Ultra, zodat de terminal er niet meer uitziet als een netwerkapparaat maar als onderdeel van Hop&nbsp;&amp;&nbsp;Bites — en zodat pinnen niet langer afhangt van een protocol dat myPOS half documenteert.</p>
+    <div class="meta">
+      <span>myPOS Ultra · N96 · OS 2.3.3</span>
+      <span>Smart SDK 1.0.8</span>
+      <span>TID 80561740</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Waarom deze app er komt</h2>
+    <p>De LAN-route via IPP werkt sinds 19 augustus: de Pi stuurt een bedrag naar de terminal, de klant betaalt, de kassa krijgt RRN en autorisatiecode terug. Die route blijft draaien en blijft de terugvaloptie. Maar er zitten drie dingen aan vast die we niet kunnen repareren.</p>
+    <p>Tussen betalingen toont de terminal het wachtscherm van POSLink&nbsp;Manager, met het IP-adres en de poort van de kassa erop — de klant kijkt daar recht tegenaan. <code>DISPLAY_TEXT</code> wordt door de Ultra bevestigd en genegeerd, en die methode staat niet eens in myPOS' officiële methodelijst. Verder hangt de hele route aan gedrag dat nergens beschreven staat: de handshake bij de eerste verbinding, de stagevolgorde 1&nbsp;→&nbsp;11&nbsp;→&nbsp;2&nbsp;→&nbsp;5, het feit dat <code>LANG=NL</code> niet werkt en <code>LANG=EN</code> wel. Elke firmware-update van myPOS kan daar iets aan veranderen.</p>
+    <p>Met de Smart SDK verdwijnen alle drie. Het scherm is van ons, de betaling loopt via een ondersteunde API, en de terminal autoriseert nog steeds via zijn eigen simkaart — dus de Pi heeft nog altijd geen internet nodig.</p>
+  </section>
+
+  <section>
+    <h2>De richting draait om</h2>
+    <p>Nu duwt de Pi een bedrag naar de terminal. Straks haalt de terminal het op bij de Pi. Dat is geen smaakkwestie: de Ultra hangt als client aan het access point van de Pi, dus hij kan altijd naar buiten bellen terwijl er niets naar hem toe hoeft. Geen open poort op de terminal, geen handshake die eerst opgebruikt moet worden, en een herstart van de app herstelt zichzelf zonder dat de kassa iets merkt.</p>
+
+    <div class="flow">
+      <svg viewBox="0 0 640 200" role="img" aria-label="De kassa op de Pi houdt de betaalopdracht vast; de app op de terminal haalt hem op, rekent af via de myPOS-kern en stuurt het resultaat terug.">
+        <defs>
+          <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g fill="none" stroke="currentColor" stroke-width="1.5" color="var(--line-strong)">
+          <rect x="8" y="55" width="176" height="90"/>
+          <rect x="232" y="55" width="176" height="90"/>
+          <rect x="456" y="55" width="176" height="90"/>
+        </g>
+        <g font-family="Hanken Grotesk, sans-serif" font-size="15" font-weight="700" fill="var(--ink)">
+          <text x="28" y="88">Pi · pi-bridge</text>
+          <text x="252" y="88">Ultra · Hop Terminal</text>
+          <text x="476" y="88">myPOS-kern</text>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-muted)">
+          <text x="28" y="110">bestelling, bedrag</text>
+          <text x="28" y="128">intents-tabel</text>
+          <text x="252" y="110">scherm + wachtrij</text>
+          <text x="252" y="128">Smart SDK</text>
+          <text x="476" y="110">kaart + simkaart</text>
+          <text x="476" y="128">autorisatie</text>
+        </g>
+        <g stroke="var(--accent)" stroke-width="1.5" fill="none" color="var(--accent)">
+          <path d="M232 82 L192 82" marker-end="url(#arw)"/>
+          <path d="M184 122 L224 122" marker-end="url(#arw)"/>
+          <path d="M416 100 L448 100" marker-end="url(#arw)"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--accent)">
+          <text x="176" y="72" text-anchor="end">haalt op</text>
+          <text x="192" y="140">resultaat</text>
+          <text x="424" y="92">betaalt</text>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-muted)">
+          <text x="8" y="176">geen internet nodig</text>
+          <text x="456" y="176">eigen simkaart</text>
+        </g>
+      </svg>
+      <p class="flow-note">De Pi blijft de bron van waarheid. De app is een scherm met een kaartlezer, niet een tweede kassa.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Het protocol tussen Pi en app</h2>
+    <p>Vier endpoints op de pi-bridge, bovenop wat er al staat. De authenticatie is dezelfde als voor de tablets: een koppelcode uit <span class="mono">/admin → Apparaten</span>, ingewisseld voor een token dat de app veilig bewaart. De rol wordt <span class="mono">terminal</span>, zodat een gestolen toestel met één druk op de knop ingetrokken is.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Endpoint</th><th>Doet</th><th>Let op</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>POST /pair</td>
+            <td>Wisselt de 8-tekens code in voor een token; de app stuurt meteen TID, serienummer en OS-versie mee uit <code>registerPOSInfo()</code>.</td>
+            <td>Bestaat al voor de tablets — alleen de rol is nieuw.</td>
+          </tr>
+          <tr>
+            <td>GET /terminal/next</td>
+            <td>Long-poll van 25 seconden. Levert de openstaande betaalopdracht met idempotency-key, bedrag en orderlabel, of niets.</td>
+            <td>Eén opdracht tegelijk per terminal. Bij een tweede kassa wint wie het eerst pollt.</td>
+          </tr>
+          <tr>
+            <td>POST /terminal/result</td>
+            <td>De afloop onder dezelfde idempotency-key: goedgekeurd of niet, plus autorisatiecode, RRN, STAN, gemaskeerd pannummer en kaartschema.</td>
+            <td>Mag herhaald worden. De bridge schrijft <span class="mono">payment.captured</span> hoogstens één keer.</td>
+          </tr>
+          <tr>
+            <td>POST /terminal/status</td>
+            <td>Elke minuut: accu, printerpapier, of de kaartlezer klaar is. Zichtbaar in <span class="mono">/admin → Apparaten</span>.</td>
+            <td>Vervangt het hardgecodeerde groene bolletje dat daar nu staat.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout rule">
+      <h3>Ontwerpregel: de app blijft dom</h3>
+      <p>Elke wijziging in de APK kost een reviewronde bij myPOS van één tot drie werkdagen. Dus alles wat verandert, verandert op de Pi: teksten, kleuren, logo, bedragen, wachtrijnummers. De app haalt zijn huisstijl bij het koppelen op en ververst die met elke poll. Een nieuwe menukaart of een andere accentkleur mag nooit een nieuwe app-versie nodig hebben.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Wat de klant ziet</h2>
+    <p>Vijf schermen, waarvan er één niet van ons is.</p>
+    <ul>
+      <li><strong>Rust.</strong> Logo en naam van de zaak op de huisstijlkleur, eventueel het volgende afhaalnummer. Dit is het scherm dat nu een IP-adres toont.</li>
+      <li><strong>Bedrag.</strong> Groot bedrag, orderlabel eronder, "houd je kaart bij het scherm". Verschijnt binnen een seconde nadat de kassa op PIN drukt.</li>
+      <li><strong>Betalen.</strong> Van myPOS zelf — hun betaalactiviteit neemt het scherm over zodra de kaart erbij is. Daar valt niets aan te stylen, en dat is maar goed ook: die schermen zijn gecertificeerd.</li>
+      <li><strong>Uitslag.</strong> Goedgekeurd in het groen met bedrag en kaartschema, of geweigerd met wat de medewerker nu moet doen. Acht seconden, dan terug naar rust.</li>
+      <li><strong>Koppelen.</strong> Alleen bij het inrichten: koppelcode invoeren, adres van de Pi tonen, verbinding testen.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Techniek</h2>
+
+    <h3>De SDK</h3>
+    <p>Kotlin, <code>implementation 'com.mypos:mypossmartsdk:1.0.8'</code>. Een betaling start met <code>MyPOSAPI.openPaymentActivity()</code> en een <code>MyPOSPayment</code>-object; het antwoord komt terug in <code>onActivityResult()</code> met een status uit <code>TransactionProcessingResult</code> en een <code>transaction_approved</code>-boolean. Kaartgegevens raken we nooit aan — die blijven in de gecertificeerde kern van het toestel.</p>
+
+    <h3>Twee vallen die geld kosten</h3>
+    <div class="callout risk">
+      <h3>Android kiest de simkaart, niet het kassanetwerk</h3>
+      <p>De Ultra hangt aan een WiFi-netwerk zonder internet. Android houdt daardoor mobiele data als standaardroute, en een gewone HTTP-aanroep naar <span class="mono">10.42.0.1</span> vertrekt dan over 4G en komt nooit aan. De app moet zijn verbindingen expliciet aan het WiFi-netwerk binden via <code>ConnectivityManager</code>. Wat je <em>niet</em> moet doen is Android's internetcontrole op de Pi vervalsen: dan gaat de kaartautorisatie over het internetloze WiFi en faalt elke betaling.</p>
+    </div>
+    <div class="callout risk">
+      <h3>Een betaling die de Pi niet bereikt</h3>
+      <p>Als de kaart belast is en het resultaat blijft steken in het netwerk, is er geld weg zonder bon. De app krijgt daarom een eigen wachtrij op schijf: het resultaat gaat er direct in en wordt net zo lang opnieuw aangeboden tot de Pi hem bevestigt. Dezelfde idempotency-key, dus dubbel aanbieden kan geen kwaad.</p>
+    </div>
+
+    <h3>Kleine dingen die anders later pijn doen</h3>
+    <ul>
+      <li>De pi-bridge draait TLS met een eigen CA. Die <span class="mono">hopbites-ca.crt</span> gaat mee in de app als trust anchor — geen certificaatcontrole uitzetten.</li>
+      <li>Screen pinning aan, zodat niemand per ongeluk uit de app stapt.</li>
+      <li>Bouwen met V1- én V2-ondertekening en <code>android:extractNativeLibs="true"</code>, zoals myPOS voorschrijft.</li>
+      <li>Versienummer omhoog bij elke inzending, anders weigert de AppMarket de upload.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Fases</h2>
+    <p>De volgorde is niet willekeurig: elke fase eindigt met iets dat je kunt aanzetten of weggooien, en de duurste onzekerheid staat vooraan.</p>
+
+    <div class="phases">
+      <div class="phase">
+        <div class="phase-num">0</div>
+        <div class="phase-body">
+          <h3>Toestel en toegang</h3>
+          <p>Developer-terminal in huis, <span class="mono">adb install</span> werkend, en een leeg Kotlin-project dat opstart op de Ultra. Nog geen betaling, nog geen netwerk.</p>
+          <p class="phase-done"><strong>Klaar als:</strong> een eigen APK draait op het toestel zonder tussenkomst van de AppMarket.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">1</div>
+        <div class="phase-body">
+          <h3>Eén cent</h3>
+          <p>Smart SDK erin, hardgecodeerd bedrag, knop op het scherm. Resultaat uitlezen en op het scherm zetten, inclusief geweigerd en afgebroken.</p>
+          <p class="phase-done"><strong>Klaar als:</strong> een echte kaart één cent betaalt en de app de autorisatiecode toont. Dit bewijst dat SDK 1.0.8 en de Ultra samengaan.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">2</div>
+        <div class="phase-body">
+          <h3>De lijn met de Pi</h3>
+          <p>De vier endpoints op de pi-bridge, koppelen met een code, long-poll, resultaat terugsturen, wachtrij op schijf. Netwerkbinding aan het WiFi.</p>
+          <p class="phase-done"><strong>Klaar als:</strong> op PIN drukken in de kassa het bedrag op de terminal zet, en de bon uit de printer komt met de gegevens die de terminal teruggaf.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">3</div>
+        <div class="phase-body">
+          <h3>Het gezicht</h3>
+          <p>De vijf schermen, huisstijl opgehaald bij de bridge, screen pinning, het rustscherm met logo. Vanaf hier is het IP-adres uit beeld.</p>
+          <p class="phase-done"><strong>Klaar als:</strong> een buitenstaander aan de balie niet kan zien dat dit een standaardterminal is.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">4</div>
+        <div class="phase-body">
+          <h3>Stukmaken</h3>
+          <p>WiFi eruit trekken tijdens een betaling. Pi herstarten terwijl de kaart erin zit. App killen na de autorisatie. Accu leeg laten lopen.</p>
+          <p class="phase-done"><strong>Klaar als:</strong> geen enkel scenario geld laat verdwijnen zonder dat de kassa het weet, en elke onduidelijke afloop bij de medewerker terechtkomt in plaats van bij de klant.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-num">5</div>
+        <div class="phase-body">
+          <h3>Uitrollen</h3>
+          <p>Inzenden bij de AppMarket met de TID-allowlist erop, zodat de app alleen op onze eigen terminals verschijnt. IPP blijft als terugvaloptie in <span class="mono">pos.env</span> staan.</p>
+          <p class="phase-done"><strong>Klaar als:</strong> de truck een dienst draait op de app, met de oude route één regel configuratie ver weg.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Wat de inzending vraagt</h2>
+    <p>Het formulier in het Partner Portal (<span class="mono">Apps → Add New App</span>) leest de technische gegevens uit de APK zelf: versienaam, versiecode, package name en Android-versie zijn read-only. De rest lever je aan, en een deel daarvan is werk dat niets met code te maken heeft.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Veld</th><th>Wat erin moet</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Device Models</td><td><span class="mono">myPOS Ultra (Nexgo)</span> — het toestel staat er als doel in, dat is bevestigd.</td></tr>
+          <tr><td>Category</td><td>Finance.</td></tr>
+          <tr><td>TID Allow List</td><td>De 8-cijferige TID's van onze eigen terminals, te beginnen met <span class="mono">80561740</span>. Leeg laten betekent openbaar — dus niet leeg laten.</td></tr>
+          <tr><td>Privacy Policy</td><td>Een URL, en die moet dus ergens staan. Nu nog niet geregeld; de DPIA in <span class="mono">docs/dpia.md</span> is de basis, maar een publieke pagina is iets anders dan een intern document.</td></tr>
+          <tr><td>Update via</td><td>WiFi én datakaart. In de truck heeft het WiFi van de Pi geen internet, dus een update die alleen over WiFi mag komen, komt nooit aan.</td></tr>
+          <tr><td>Beeldmateriaal</td><td>Banner 720×400 en icoon 512×512 (32-bit PNG met alpha), plus screenshots tussen 320 en 3840&nbsp;px zonder alphakanaal.</td></tr>
+          <tr><td>Teksten</td><td>Korte en lange omschrijving, Engels als standaardtaal. Meer talen mag, hoeft niet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Dat beeldmateriaal is geen bijzaak: een banner, een icoon en schermafbeeldingen van een app die nog niet bestaat, terwijl de review door een mens gaat die hem installeert. Reken erop dat fase&nbsp;3 af moet zijn voordat je kunt inzenden.</p>
+  </section>
+
+  <section>
+    <h2>Wat er nog niet vaststaat</h2>
+    <div class="risks">
+      <p><span class="tag open">Open</span> &nbsp;Smart SDK 1.0.8 is niet jong. Of hij de Ultra met OS 2.3.3 volledig ondersteunt, weten we pas in fase 1 — en dat is precies waarom die fase vooraan staat en niets anders eromheen gebouwd wordt.</p>
+      <p><span class="tag known">Bekend</span> &nbsp;De APK gaat niet-ondertekend de deur uit; myPOS zet er bij distributie hun eigen PCI-sleutel op. Dat is bevestigd — daarmee is de grootste onbekende van dit plan weg.</p>
+      <p><span class="tag open">Open</span> &nbsp;Een publieke privacyverklaring met een eigen URL. Verplicht veld op het inzendformulier, en er is er nog geen.</p>
+      <p><span class="tag known">Bekend</span> &nbsp;Reviewtijd van één tot drie werkdagen per versie. Daar is de ontwerpregel op gebouwd: als de app dom blijft, is een reviewronde zeldzaam.</p>
+      <p><span class="tag known">Bekend</span> &nbsp;Het betaalscherm zelf blijft van myPOS. Volledige huisstijl krijg je nooit — alles eromheen wel.</p>
+      <p><span class="tag blocker">Kritiek</span> &nbsp;Zolang de app niet in productie draait, is IPP de enige manier om te pinnen. Die route blijft daarom in de bridge staan en wordt niet opgeruimd.</p>
+    </div>
+  </section>
+
+  <footer>
+    Hop &amp; Bites POS · ontwerpplan Hop Terminal · aanvullend op de IPP-route in <span class="mono">apps/pi-bridge/src/services/mypos-lan.ts</span>
+  </footer>
+
+</div>
