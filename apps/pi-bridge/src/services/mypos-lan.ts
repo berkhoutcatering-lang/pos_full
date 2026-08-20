@@ -38,28 +38,44 @@ function terminal() {
   return { host: config.MYPOS_TERMINAL_HOST!, port: config.MYPOS_TERMINAL_PORT }
 }
 
-/** When we last saw the terminal answer, so we know the link is warm. */
+/** When we last saw the terminal answer. Alleen voor logging en /_health. */
 let lastContactAt = 0
 
-/** How long a confirmed link stays warm before we hand-shake again. */
-const LINK_WARM_MS = 60_000
+/**
+ * Adempauze tussen de handshake en het bedrag.
+ *
+ * Met de hand getest werkte het omdat er seconden tussen de twee commando's
+ * zaten. De bridge deed ze binnen milliseconden achter elkaar, en dan slikt de
+ * terminal de PURCHASE alsnog in — hij is dan nog met zijn welkomstscherm bezig.
+ */
+const HANDSHAKE_SETTLE_MS = 400
 
 /**
- * Say hello before arming a payment.
+ * Zeg hallo, en pas daarna het bedrag.
  *
- * The first connection after a quiet period is spent on the terminal's own
- * handshake — it shows "All set! Now you can use it" and swallows whatever we
- * sent in that session, so the customer never sees the amount. A PING is the
- * cheapest way to get that out of the way: it is read-only, it completes in a
- * fraction of a second, and it doubles as proof the terminal is reachable
- * before we tell the kassa a payment is running.
+ * De eerste verbinding gaat op aan de handshake van de terminal: hij toont
+ * "All set! Now you can use it" en beantwoordt niet wat er in diezelfde sessie
+ * is verstuurd. Een PING vangt dat op — read-only, klaar in een fractie van een
+ * seconde, en meteen het bewijs dat de terminal bereikbaar is voordat we de
+ * kassa vertellen dat er een betaling loopt.
+ *
+ * Dit gebeurt vóór ELKE betaling, niet alleen na een stille periode. De eerdere
+ * aanname dat een link daarna een minuut warm blijft, hield geen stand: de
+ * terminal lijkt die begroeting per verbinding te willen, en een klant die naar
+ * een leeg scherm kijkt is duurder dan 400 milliseconden.
  */
 async function ensureLink(): Promise<void> {
-  if (Date.now() - lastContactAt < LINK_WARM_MS) return
-
+  const started = Date.now()
   const ping = runIppMethod({ ...terminal(), method: "PING" })
-  await ping.done
+  const final = await ping.done
   lastContactAt = Date.now()
+
+  logger.info(
+    { ms: lastContactAt - started, status: final.STATUS, stage: final.STAGE },
+    "terminal handshake ok",
+  )
+
+  await new Promise((resolve) => setTimeout(resolve, HANDSHAKE_SETTLE_MS))
 }
 
 /**
@@ -292,9 +308,15 @@ export async function startLanTransaction(
     .catch((err) => {
       const reason = (err as Error).message
       // A dropped socket mid-transaction is the ambiguous case: the terminal
-      // may be finishing the authorisation without us watching.
+      // may be finishing the authorisation without us watching. De stages die
+      // we wél zagen staan erbij: zonder die context is "ipp_timeout" in de
+      // kassa niet te herleiden tot wat de terminal deed.
       logger.error(
-        { err: reason, key: args.idempotency_key },
+        {
+          err: reason,
+          key: args.idempotency_key,
+          frames: session.frames.map((f) => `stage=${f.STAGE} status=${f.STATUS}`),
+        },
         "myPOS LAN session failed",
       )
       updateIntent(args.idempotency_key, { status: "unresolved", last_error: reason })
