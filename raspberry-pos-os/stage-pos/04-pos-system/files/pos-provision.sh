@@ -54,6 +54,15 @@ CLEAN="${RUN_DIR}/pos.env.clean"
 if grep -qE '^[A-Za-z_][A-Za-z0-9_]*([[:space:]]+=|=[[:space:]]+[^[:space:]])' "${POS_ENV}"; then
   WARNINGS+=("pos.env had spaties rond een '=' — die zijn genegeerd. Schrijf KEY=waarde zonder spaties eromheen.")
 fi
+# Alles wat geen comment, lege regel of KEY=waarde is, wordt straks als
+# commando uitgevoerd. Meestal is dat een afgebroken regel: een comment waarvan
+# het '#' op de vorige regel bleef staan, of een waarde die over twee regels is
+# geplakt. Dat gaat stil mis — de variabele blijft leeg en niemand ziet waarom.
+ODD=$(grep -nvE '^[[:space:]]*(#|$)|^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=' "${POS_ENV}" | cut -d: -f1 | tr '
+' ' ')
+if [ -n "${ODD}" ]; then
+  WARNINGS+=("pos.env: regel(s) ${ODD}zijn geen comment en geen KEY=waarde — waarschijnlijk afgebroken regels. Ze worden genegeerd.")
+fi
 sed -e 's/\r$//' -e '1s/^\xEF\xBB\xBF//' \
     -e 's/[[:space:]]*$//' \
     -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)[[:space:]]*=[[:space:]]*/\1=/' \
