@@ -4,6 +4,7 @@ import { authenticateTablet } from "../middleware/auth-tablet.js"
 import { enqueueOutbox, getOutboxPayload, nextQueueNumber } from "../db/outbox.js"
 import { writeAuditEvent } from "../services/audit-log.js"
 import { ULID_RE } from "../utils/ulid.js"
+import { asUuidOrNull } from "../utils/uuid.js"
 import { config } from "../config.js"
 
 // PWA writes orders here over LAN. Pi enqueues to outbox FIRST so the
@@ -72,7 +73,7 @@ export async function orderRoutes(app: FastifyInstance) {
         ...parsed.data,
         daily_seq,
         ordered_label,
-        terminal_id: claims.terminal_id,
+        terminal_id: asUuidOrNull(claims.terminal_id),
         placed_at: new Date().toISOString(),
       }
 
@@ -123,7 +124,7 @@ export async function orderRoutes(app: FastifyInstance) {
         idempotency_key: parsed.data.idempotency_key,
         operation: "upsert",
         table_name: "pos_order_state_changes",
-        payload: { ...parsed.data, terminal_id: claims.terminal_id },
+        payload: { ...parsed.data, terminal_id: asUuidOrNull(claims.terminal_id) },
         venue_id: claims.venue_id,
       })
 

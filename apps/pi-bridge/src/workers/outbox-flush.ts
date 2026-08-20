@@ -1,8 +1,6 @@
 import { supabaseAdmin } from "../services/audit-log.js"
 import { describeError } from "../utils/describe-error.js"
-
-/** Postgres accepteert alleen dit als uuid. */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { UUID_RE } from "../utils/uuid.js"
 import { config } from "../config.js"
 import { getPendingOutbox, markDelivered, markFailed } from "../db/outbox.js"
 import { logger } from "../utils/logger.js"
@@ -29,6 +27,17 @@ async function flushOnce() {
           "outbox row carries a non-uuid terminal_id — koppel de tablet opnieuw",
         )
         payload.terminal_id = null
+      }
+      // Audit-regels dragen hun velden een niveau dieper, in de RPC-argumenten.
+      const rpc = payload.rpc as Record<string, unknown> | undefined
+      if (rpc) {
+        for (const field of ["p_actor_terminal_id", "p_actor_user_id"]) {
+          const v = rpc[field]
+          if (typeof v === "string" && !UUID_RE.test(v)) {
+            logger.warn({ id: row.id, field, value: v }, "audit row carries a non-uuid actor")
+            rpc[field] = null
+          }
+        }
       }
       // P0-1 defence-in-depth: refuse to flush any row whose org_id does
       // not match this Pi's configured ORG_ID. Service-role bypasses RLS,

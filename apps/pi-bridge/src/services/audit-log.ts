@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { config } from "../config.js"
 import { logger } from "../utils/logger.js"
+import { asUuidOrNull } from "../utils/uuid.js"
 import { enqueueOutbox } from "../db/outbox.js"
 import { newId } from "../utils/ulid.js"
 
@@ -53,8 +54,10 @@ export async function writeAuditEvent(args: {
   const rpcArgs = {
     p_org_id: config.ORG_ID,
     p_venue_id: args.venue_id ?? config.VENUE_ID,
-    p_actor_user_id: args.actor_user_id ?? null,
-    p_actor_terminal_id: args.actor_terminal_id ?? null,
+    p_actor_user_id: asUuidOrNull(args.actor_user_id),
+    // Een niet-uuid hier laat de hele audit-regel sneuvelen, en daarmee een
+    // schakel in de hash-chain. Zie utils/uuid.ts.
+    p_actor_terminal_id: asUuidOrNull(args.actor_terminal_id),
     p_event_type: args.event_type,
     p_payload: payloadWithVersion,
   }
