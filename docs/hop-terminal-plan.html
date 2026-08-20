@@ -427,8 +427,9 @@
         <div class="phase-num">0</div>
         <div class="phase-body">
           <h3>Toestel en toegang</h3>
-          <p>Developer-terminal in huis, <span class="mono">adb install</span> werkend, en een leeg Kotlin-project dat opstart op de Ultra. Nog geen betaling, nog geen netwerk.</p>
-          <p class="phase-done"><strong>Klaar als:</strong> een eigen APK draait op het toestel zonder tussenkomst van de AppMarket.</p>
+          <p>Een <strong>demo-debugtoestel</strong> bestellen. Op 20 augustus bevestigde myPOS het onomwonden: <em>"This is a production device, which means that you are not able to install applications via ADB"</em> en <em>"Your device cannot be switched to a debug one. You will need to order a new demo debug device."</em> Onze eigen Ultra is dus geen ontwikkeltoestel en wordt dat ook niet.</p>
+          <p>Getoetst met een APK die door AGP is gebouwd en aantoonbaar V1 én V2 draagt: die installeert probleemloos in een emulator en wordt door de Ultra geweigerd met <span class="mono">PosAuth failed</span>. Het ligt niet aan de handtekening, het is beleid.</p>
+          <p class="phase-done"><strong>Klaar als:</strong> een eigen APK draait op een toestel zonder tussenkomst van de AppMarket. Zonder demo-toestel bestaat die stap niet en verloopt élke iteratie via een reviewronde — wat de ontwerpregel hierboven van "verstandig" naar "noodzakelijk" tilt.</p>
         </div>
       </div>
 
@@ -508,7 +509,8 @@
     <div class="risks">
       <p><span class="tag open">Open</span> &nbsp;Smart SDK 1.0.8 is niet jong. Of hij de Ultra met OS 2.3.3 volledig ondersteunt, weten we pas in fase 1 — en dat is precies waarom die fase vooraan staat en niets anders eromheen gebouwd wordt.</p>
       <p><span class="tag known">Bekend</span> &nbsp;De APK gaat niet-ondertekend de deur uit; myPOS zet er bij distributie hun eigen PCI-sleutel op. Dat is bevestigd — daarmee is de grootste onbekende van dit plan weg.</p>
-      <p><span class="tag open">Open</span> &nbsp;Een publieke privacyverklaring met een eigen URL. Verplicht veld op het inzendformulier, en er is er nog geen.</p>
+      <p><span class="tag known">Bekend</span> &nbsp;De privacyverklaring is geschreven en compleet — zie <span class="mono">docs/privacy-hop-terminal.html</span>. Hij moet nog wel op een eigen domein komen te staan.</p>
+      <p><span class="tag blocker">Kritiek</span> &nbsp;Zonder demo-debugtoestel is er geen lokale ontwikkellus: alles gaat via de AppMarket, met één tot drie werkdagen review per versie. Kosten en levertijd van zo'n toestel staan uit bij sales; dat antwoord bepaalt het tempo van dit hele plan.</p>
       <p><span class="tag known">Bekend</span> &nbsp;Reviewtijd van één tot drie werkdagen per versie. Daar is de ontwerpregel op gebouwd: als de app dom blijft, is een reviewronde zeldzaam.</p>
       <p><span class="tag known">Bekend</span> &nbsp;Het betaalscherm zelf blijft van myPOS. Volledige huisstijl krijg je nooit — alles eromheen wel.</p>
       <p><span class="tag blocker">Kritiek</span> &nbsp;Zolang de app niet in productie draait, is IPP de enige manier om te pinnen. Die route blijft daarom in de bridge staan en wordt niet opgeruimd.</p>
