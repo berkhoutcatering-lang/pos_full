@@ -102,7 +102,14 @@ class MainActivity : ComponentActivity() {
             // krijg je alleen het gelukkige pad te zien, en juist de twee
             // andere schermen moeten kloppen: daar staat een klant die denkt
             // dat hij betaald heeft.
-            gateway = StubPaymentGateway(behaviour = ::nextStubOutcome),
+            // Een release-build keurt niets goed zolang de echte SDK er niet
+            // in zit: "gelukt" tonen zonder dat er is afgerekend, is het enige
+            // dat erger is dan een app die niets doet.
+            gateway = if (BuildConfig.DEBUG) {
+                StubPaymentGateway(behaviour = ::nextStubOutcome)
+            } else {
+                UnavailableGateway
+            },
             queue = queue,
             appVersion = BuildConfig.VERSION_NAME,
         )
