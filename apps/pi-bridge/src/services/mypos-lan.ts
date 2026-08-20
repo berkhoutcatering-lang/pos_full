@@ -5,6 +5,7 @@ import {
   dropIntent,
   findIntent,
   insertIntent,
+  recentTerminalSids,
   updateIntent,
   STALE_PENDING_MS,
   type IntentRow,
@@ -240,9 +241,9 @@ export function receiptFields(f: IppFields) {
  * de balie gebeurde: de eerste betaling lukte, de tweede kwam er niet meer in.
  *
  * Fail-soft: lukt de bevestiging niet, dan is de betaling nog steeds gelukt en
- * heeft de klant zijn bon. Het kost hooguit een herstart van de terminal.
+ * heeft de klant zijn bon.
  */
-async function confirmToTerminal(sid: string, key: string) {
+async function confirmToTerminal(sid: string, key: string): Promise<boolean> {
   try {
     const session = runIppMethod({
       ...terminal(),
@@ -250,13 +251,65 @@ async function confirmToTerminal(sid: string, key: string) {
       fields: [["SID_ORIGINAL", sid]],
     })
     const final = await session.done
-    logger.info({ key, status: final.STATUS, stage: final.STAGE }, "terminal transaction closed")
+    const ok = final.STATUS === "0" || final.STATUS === "100"
+    logger.info(
+      { key, sid, status: final.STATUS, stage: final.STAGE, ok },
+      "terminal transaction closed",
+    )
+    return ok
   } catch (err) {
     logger.warn(
-      { key, err: (err as Error).message },
+      { key, sid, err: (err as Error).message },
       "terminal transaction not confirmed — next payment may be refused with status 20",
     )
+    return false
   }
+}
+
+/**
+ * Heeft de terminal deze betaling daadwerkelijk aangenomen?
+ *
+ * Zo ja, dan staat er bij hem een transactie open die wij moeten afsluiten —
+ * ook als de klant hem afbrak of de kaart werd geweigerd. Dat was de fout die
+ * de balie stillegde: er werd alleen bevestigd na STAGE=5, dus één annulering
+ * op het pinpad was genoeg om elke volgende betaling met STATUS=20 te laten
+ * stranden. Kwam de weigering al bij de eerste stap, dan is er niets aangenomen
+ * en valt er ook niets af te sluiten.
+ */
+function armedTerminal(frames: IppFields[]): boolean {
+  return frames.some((f) => f.STAGE === "1" && (f.STATUS === "0" || f.STATUS === "100"))
+}
+
+/**
+ * Een blijven hangende transactie op de terminal opruimen.
+ *
+ * Hij noemt niet wélke transactie openstaat, dus lopen we de sessie-ids van de
+ * laatste betalingen af tot er één wordt geaccepteerd. Een id dat hij niet kent
+ * levert STATUS=17 op en verandert niets — dit kost hooguit een paar seconden
+ * en raakt geen geld.
+ */
+export async function clearStuckTransaction(opts: {
+  key?: string
+  sid?: string
+} = {}): Promise<{ cleared: boolean; sid: string | null; tried: number }> {
+  const sids = opts.sid ? [opts.sid] : recentTerminalSids(8, opts.key)
+  if (sids.length === 0) {
+    logger.warn(
+      { key: opts.key },
+      "terminal reports an open transaction but we have no session id to close it with",
+    )
+    return { cleared: false, sid: null, tried: 0 }
+  }
+
+  for (const sid of sids) {
+    if (await confirmToTerminal(sid, opts.key ?? "recovery")) {
+      logger.info({ key: opts.key, sid }, "stuck terminal transaction cleared")
+      return { cleared: true, sid, tried: sids.indexOf(sid) + 1 }
+    }
+  }
+
+  logger.warn({ key: opts.key, tried: sids.length }, "could not clear the terminal")
+  return { cleared: false, sid: null, tried: sids.length }
 }
 
 async function settleFinalFrame(key: string, final: IppFields) {
@@ -271,7 +324,12 @@ async function settleFinalFrame(key: string, final: IppFields) {
     last_error: normalized === "approved" ? null : (message ?? null),
     // No separate payment id exists over IPP. The RRN is what the bank and the
     // customer's statement show, so that is the handle worth keeping.
-    transaction_id: receipt.rrn ?? key,
+    //
+    // Blijft leeg als de terminal er geen gaf. Eerder stond de betaalsleutel
+    // hier als vervanging, en dat las als "er is iets bij de bank gebeurd" —
+    // waarna een tweede poging met dezelfde sleutel het oude antwoord terugkreeg
+    // in plaats van de terminal opnieuw aan te slaan.
+    transaction_id: receipt.rrn ?? null,
   })
 
   logger.info(
@@ -283,6 +341,81 @@ async function settleFinalFrame(key: string, final: IppFields) {
 
   // Give the customer a moment with the result before we take the screen back.
   setTimeout(() => void showIdleScreen(), 8_000).unref()
+}
+
+/** Het bedrag klaarzetten op de terminal. Eén TCP-sessie, één betaling. */
+function armPurchase(args: MyPosStartArgs): IppSession {
+  return runIppMethod({
+    ...terminal(),
+    method: "PURCHASE",
+    fields: [
+      ["AMOUNT", formatAmount(args.amount_cents)],
+      ["CURRENCY", "978"],
+      ["FIXED_PINPAD", "1"],
+      ["LANG", config.MYPOS_TERMINAL_LANG],
+      ["OPERATOR_CODE", config.MYPOS_OPERATOR_CODE],
+      // Echoed back on the final frame, so an order stays traceable from the
+      // terminal's own journal without our database.
+      ["REFERENCE", args.idempotency_key],
+    ],
+  })
+}
+
+/**
+ * De sessie uitzitten en het resultaat wegschrijven. Draait op de achtergrond;
+ * de kassa pollt ondertussen op de intent-rij.
+ *
+ * `mayRecover` is er voor precies één ronde: weigert de terminal omdat er nog
+ * een transactie van hem openstaat, dan ruimen we die op en zetten we het bedrag
+ * opnieuw klaar. De klant staat er nog, en die hoort daar niets van te merken.
+ */
+async function watchSession(
+  args: MyPosStartArgs,
+  session: IppSession,
+  mayRecover: boolean,
+): Promise<void> {
+  try {
+    const final = await session.done
+
+    if (final.STATUS === "20" && mayRecover) {
+      logger.warn({ key: args.idempotency_key }, "terminal refused: previous transaction still open")
+      const { cleared } = await clearStuckTransaction({ key: args.idempotency_key })
+      if (cleared) {
+        await ensureLink()
+        const retry = armPurchase(args)
+        live.set(args.idempotency_key, retry)
+        updateIntent(args.idempotency_key, { terminal_sid: retry.sid })
+        void watchSession(args, retry, false)
+        return
+      }
+    }
+
+    await settleFinalFrame(args.idempotency_key, final)
+    // Alles wat de terminal heeft aangenomen moet ook weer bij hem dicht —
+    // goedgekeurd, geweigerd of afgebroken.
+    if (armedTerminal(session.frames)) {
+      await confirmToTerminal(session.sid, args.idempotency_key)
+    }
+  } catch (err) {
+    const reason = (err as Error).message
+    // A dropped socket mid-transaction is the ambiguous case: the terminal
+    // may be finishing the authorisation without us watching. De stages die
+    // we wél zagen staan erbij: zonder die context is "ipp_timeout" in de
+    // kassa niet te herleiden tot wat de terminal deed.
+    logger.error(
+      {
+        err: reason,
+        key: args.idempotency_key,
+        sid: session.sid,
+        frames: session.frames.map((f) => `stage=${f.STAGE} status=${f.STATUS}`),
+      },
+      "myPOS LAN session failed",
+    )
+    updateIntent(args.idempotency_key, { status: "unresolved", last_error: reason })
+  } finally {
+    // Niet wissen als er inmiddels een nieuwe sessie voor deze sleutel loopt.
+    if (live.get(args.idempotency_key) === session) live.delete(args.idempotency_key)
+  }
 }
 
 export async function startLanTransaction(
@@ -300,20 +433,7 @@ export async function startLanTransaction(
   let session: IppSession
   try {
     await ensureLink()
-    session = runIppMethod({
-      ...terminal(),
-      method: "PURCHASE",
-      fields: [
-        ["AMOUNT", formatAmount(args.amount_cents)],
-        ["CURRENCY", "978"],
-        ["FIXED_PINPAD", "1"],
-        ["LANG", config.MYPOS_TERMINAL_LANG],
-        ["OPERATOR_CODE", config.MYPOS_OPERATOR_CODE],
-        // Echoed back on the final frame, so an order stays traceable from the
-        // terminal's own journal without our database.
-        ["REFERENCE", args.idempotency_key],
-      ],
-    })
+    session = armPurchase(args)
   } catch (err) {
     updateIntent(args.idempotency_key, {
       status: "failed",
@@ -327,34 +447,14 @@ export async function startLanTransaction(
   }
 
   live.set(args.idempotency_key, session)
+  // Meteen vastleggen, vóór het eerste antwoord: gaat de bridge onderuit
+  // terwijl de klant pint, dan is dit het enige waarmee de transactie later
+  // nog bij de terminal is af te sluiten.
+  updateIntent(args.idempotency_key, { terminal_sid: session.sid })
 
   // Deliberately not awaited: the kassa polls. Every exit path writes the
   // intent row, so a failure here can never leave the caller without an answer.
-  void session.done
-    .then(async (final) => {
-      await settleFinalFrame(args.idempotency_key, final)
-      // Alleen bij een transactie die de terminal daadwerkelijk heeft
-      // afgerond; een weigering onderweg (bijvoorbeeld STATUS=20) heeft niets
-      // om te bevestigen.
-      if (final.STAGE === "5") await confirmToTerminal(session.sid, args.idempotency_key)
-    })
-    .catch((err) => {
-      const reason = (err as Error).message
-      // A dropped socket mid-transaction is the ambiguous case: the terminal
-      // may be finishing the authorisation without us watching. De stages die
-      // we wél zagen staan erbij: zonder die context is "ipp_timeout" in de
-      // kassa niet te herleiden tot wat de terminal deed.
-      logger.error(
-        {
-          err: reason,
-          key: args.idempotency_key,
-          frames: session.frames.map((f) => `stage=${f.STAGE} status=${f.STATUS}`),
-        },
-        "myPOS LAN session failed",
-      )
-      updateIntent(args.idempotency_key, { status: "unresolved", last_error: reason })
-    })
-    .finally(() => live.delete(args.idempotency_key))
+  void watchSession(args, session, true)
 
   return { transaction_id: args.idempotency_key, status: "pending" }
 }
@@ -370,9 +470,12 @@ export async function startLanTransaction(
 function settleExistingLan(row: IntentRow): MyPosStartResult | null {
   const handle = row.transaction_id ?? row.idempotency_key
 
-  // Refused before anything reached the terminal: retrying is safe, and it is
-  // what the operator is asking for by tapping again.
-  if (row.status === "failed" && !row.transaction_id) return null
+  // Niets belast: opnieuw aanslaan mag, en dat is precies wat de operator
+  // vraagt door nogmaals te tikken. Een weigering — kaart afgekeurd, klant
+  // brak af, terminal wilde niet — is per definitie een betaling die niet
+  // doorging. Alleen `approved` en `unresolved` mogen nooit opnieuw: daar kan
+  // wél geld tegenover staan.
+  if (row.status === "failed" || row.status === "declined") return null
 
   // Pending with no session behind it means the bridge restarted while the
   // customer was paying, and we cannot ask the terminal what became of it.

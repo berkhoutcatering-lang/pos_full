@@ -29,7 +29,17 @@ piDb.exec(`
     updated_at INTEGER NOT NULL
   );
 `)
-vi.mock("../src/db/outbox.js", () => ({ piDb }))
+// Wat er naar de boekhouding wordt geschoven. pos_payments hoort er precies
+// één keer in te staan bij een geslaagde betaling — dat is waar de
+// dagafsluiting contant en pin uit elkaar haalt.
+const queued: Array<{ table_name: string; payload: Record<string, unknown> }> = []
+vi.mock("../src/db/outbox.js", () => ({
+  piDb,
+  enqueueOutbox: vi.fn((row: { table_name: string; payload: Record<string, unknown> }) => {
+    queued.push(row)
+    return { enqueued: true }
+  }),
+}))
 
 const auditEvents: Array<{ event_type: string }> = []
 vi.mock("../src/services/audit-log.js", () => ({
@@ -70,6 +80,7 @@ function terminalPresent() {
 beforeEach(() => {
   piDb.exec("DELETE FROM mypos_intents")
   auditEvents.length = 0
+  queued.length = 0
   _resetAppTransport()
 })
 
@@ -131,6 +142,16 @@ describe("afloop melden", () => {
     expect(retry).toEqual({ status: "approved", already_settled: true })
 
     expect(auditEvents.filter((e) => e.event_type === "payment.captured")).toHaveLength(1)
+
+    const payments = queued.filter((q) => q.table_name === "pos_payments")
+    expect(payments).toHaveLength(1)
+    expect(payments[0].payload).toMatchObject({
+      order_id: "c022931e-e788-46b3-8f0c-bda50f0e09a6",
+      method: "pin",
+      status: "captured",
+      amount_cents: 950,
+      mypos_transaction_id: "623120552024",
+    })
 
     const poll = pollAppStatus(KEY)
     expect(poll.status).toBe("approved")

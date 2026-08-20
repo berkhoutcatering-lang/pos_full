@@ -166,10 +166,11 @@ export function runIppMethod(req: IppRequest): IppSession {
         // allang had gezegd wat er mis was — bijvoorbeeld STATUS=20, "vorige
         // transactie niet afgerond".
         if (f.STATUS !== undefined && f.STATUS !== "0" && f.STATUS !== "100") {
-          logger.warn(
-            { sid, stage: f.STAGE, status: f.STATUS, method: f.METHOD },
-            "ipp refused mid-flow",
-          )
+          // Het hele frame erbij, niet alleen stage en status: bij een
+          // weigering zit de reden in velden die per geval verschillen, en de
+          // sessie-id staat erbij zodat een blijvend openstaande transactie
+          // naderhand nog af te sluiten is.
+          logger.warn({ sid, frame: f }, "ipp refused mid-flow")
           finish(() => resolve(f))
           return
         }

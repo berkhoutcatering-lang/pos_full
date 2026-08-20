@@ -148,6 +148,11 @@ addColumnIfMissing("mypos_intents", "status_code", "TEXT")
 addColumnIfMissing("mypos_intents", "last_error", "TEXT")
 // Bongegevens zoals de terminal-app ze teruggaf (autorisatiecode, RRN, schema).
 addColumnIfMissing("mypos_intents", "receipt_json", "TEXT")
+// De sessie-id waarmee de terminal deze transactie kent. Nodig om hem naderhand
+// af te sluiten: blijft dat uit, dan weigert hij de volgende betaling met
+// STATUS=20. Stond eerst alleen in het geheugen, dus na een herstart van de
+// bridge was de openstaande transactie niet meer af te ronden.
+addColumnIfMissing("mypos_intents", "terminal_sid", "TEXT")
 
 export interface OutboxRow {
   id: number

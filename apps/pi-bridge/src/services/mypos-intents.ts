@@ -52,6 +52,8 @@ export interface IntentRow {
   last_error: string | null
   /** Bongegevens van de terminal-app, als JSON. */
   receipt_json: string | null
+  /** IPP-sessie-id waarmee de terminal deze transactie kent. */
+  terminal_sid: string | null
   created_at: number
 }
 
@@ -78,6 +80,26 @@ export function findIntent(handle: string): IntentRow | undefined {
  */
 export function dropIntent(idempotency_key: string) {
   piDb.prepare("DELETE FROM mypos_intents WHERE idempotency_key = ?").run(idempotency_key)
+}
+
+/**
+ * De sessie-ids van de laatste betalingen, nieuwste eerst.
+ *
+ * Waarvoor: de terminal weigert een nieuwe betaling met STATUS=20 zolang de
+ * vorige bij hem openstaat, en die sluit je alleen af met het sessie-id waarmee
+ * hij hem kent. Zonder deze lijst is het enige antwoord "herstart de terminal",
+ * midden in een rij klanten.
+ */
+export function recentTerminalSids(limit = 8, exclude?: string): string[] {
+  const rows = piDb
+    .prepare(
+      `SELECT terminal_sid FROM mypos_intents
+       WHERE terminal_sid IS NOT NULL AND idempotency_key <> ?
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+    .all(exclude ?? "", limit) as Array<{ terminal_sid: string }>
+  return rows.map((r) => r.terminal_sid)
 }
 
 export function insertIntent(args: MyPosStartArgs) {
@@ -107,6 +129,7 @@ export function updateIntent(
     status?: string
     status_code?: string | null
     last_error?: string | null
+    terminal_sid?: string | null
   },
 ) {
   const sets: string[] = []

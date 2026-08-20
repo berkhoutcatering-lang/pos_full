@@ -15,7 +15,15 @@
 //   node mypos-ipp.mjs --host 192.168.1.135 --version 200
 //   node mypos-ipp.mjs --host 192.168.1.135 --method PING
 //   node mypos-ipp.mjs --host 192.168.1.135 --pay 0.01
+//   node mypos-ipp.mjs --host 192.168.1.135 --complete <sid>
 //   node mypos-ipp.mjs --host 192.168.1.135 --display "Hop en Bites|Welkom"
+//
+// --complete sluit een transactie af die bij de terminal is blijven openstaan.
+// Zolang dat niet gebeurt weigert hij elke volgende betaling met STATUS=20,
+// "NOT COMPLETED LAST TX". Het sessie-id is dat van de betaling die bleef
+// hangen; in de bridge-logs staat het bij "ipp refused mid-flow" en bij
+// "myPOS LAN session failed". Een onbekend id levert STATUS=17 op en verandert
+// niets, dus proberen kost niets.
 //
 // --display stuurt DISPLAY_TEXT. Op een myPOS Ultra antwoordt hij daar
 // STATUS=0 op en verandert er niets op het scherm: de methode staat niet in
@@ -70,9 +78,11 @@ function parse(payload) {
 const sid = args.sid ?? crypto.randomUUID()
 const method = args.pay
   ? "PURCHASE"
-  : args.display
-    ? "DISPLAY_TEXT"
-    : String(args.method ?? "GET_STATUS")
+  : args.complete
+    ? "COMPLETE_TX"
+    : args.display
+      ? "DISPLAY_TEXT"
+      : String(args.method ?? "GET_STATUS")
 
 const fields = [
   ["PROTOCOL", "IPP"],
@@ -80,6 +90,10 @@ const fields = [
   ["METHOD", method],
   ["SID", sid],
 ]
+if (typeof args.complete === "string") {
+  // De transactie die dicht moet — niet de sessie waarin we dat vragen.
+  fields.push(["SID_ORIGINAL", args.complete])
+}
 if (typeof args.display === "string") {
   // Wat er tussen betalingen op de terminal staat. Rijen scheiden met | —
   // meer dan vijf regels passen er niet op.

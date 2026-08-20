@@ -57,7 +57,17 @@ piDb.exec(`
   );
 `)
 
-vi.mock("../src/db/outbox.js", () => ({ piDb }))
+// Wat er naar de boekhouding wordt geschoven. pos_payments hoort er precies
+// één keer in te staan bij een geslaagde betaling — dat is waar de
+// dagafsluiting contant en pin uit elkaar haalt.
+const queued: Array<{ table_name: string; payload: Record<string, unknown> }> = []
+vi.mock("../src/db/outbox.js", () => ({
+  piDb,
+  enqueueOutbox: vi.fn((row: { table_name: string; payload: Record<string, unknown> }) => {
+    queued.push(row)
+    return { enqueued: true }
+  }),
+}))
 
 const auditEvents: unknown[] = []
 vi.mock("../src/services/audit-log.js", () => ({

@@ -8,6 +8,7 @@ import {
   cancelMyPosTransaction,
   refundMyPos,
 } from "../services/mypos-proxy.js"
+import { clearStuckTransaction } from "../services/mypos-lan.js"
 import { writeAuditEvent } from "../services/audit-log.js"
 import { config } from "../config.js"
 import { ULID_RE } from "../utils/ulid.js"
@@ -26,6 +27,11 @@ const RefundSchema = z.object({
   transaction_id: z.string().min(1).max(128),
   amount_cents: z.number().int().positive().max(1_000_000),
   idempotency_key: z.string().regex(ULID_RE),
+})
+
+const ClearSchema = z.object({
+  // Zonder sessie-id loopt de bridge de laatste betalingen zelf af.
+  sid: z.string().min(8).max(64).optional(),
 })
 
 export async function myposRoutes(app: FastifyInstance) {
@@ -99,6 +105,31 @@ export async function myposRoutes(app: FastifyInstance) {
         }
         throw err
       }
+    },
+  )
+
+  // De terminal losmaken als hij blijft zeggen dat er nog een betaling
+  // openstaat. De bridge doet dit sinds 20 augustus 2026 vanzelf bij de
+  // volgende betaling; deze knop is voor het geval hij het sessie-id niet meer
+  // heeft — bijvoorbeeld doordat de bridge ertussenuit ging — en iemand het uit
+  // de logs vist.
+  app.post(
+    "/mypos/terminal/clear",
+    { preHandler: [authenticateTablet, requireRole("manager")] },
+    async (req, reply) => {
+      if (config.MYPOS_TRANSPORT !== "lan") {
+        return reply.code(503).send({ error: "mypos_not_lan" })
+      }
+      const parsed = ClearSchema.safeParse(req.body ?? {})
+      if (!parsed.success) return reply.code(400).send({ error: "validation" })
+
+      const result = await clearStuckTransaction({ sid: parsed.data.sid })
+      return reply.send({
+        ...result,
+        message: result.cleared
+          ? "De terminal is losgemaakt — je kunt weer pinnen."
+          : "De terminal liet zich niet losmaken. Herstart hem en probeer opnieuw.",
+      })
     },
   )
 
