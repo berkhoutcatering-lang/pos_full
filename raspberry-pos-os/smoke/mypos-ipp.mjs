@@ -16,7 +16,11 @@
 //   node mypos-ipp.mjs --host 192.168.1.135 --method PING
 //   node mypos-ipp.mjs --host 192.168.1.135 --pay 0.01
 //   node mypos-ipp.mjs --host 192.168.1.135 --display "Hop en Bites|Welkom"
-//   node mypos-ipp.mjs --host 192.168.1.135 --hide
+//
+// --display stuurt DISPLAY_TEXT. Op een myPOS Ultra antwoordt hij daar
+// STATUS=0 op en verandert er niets op het scherm: de methode staat niet in
+// myPOS' methodelijst en komt uit hun SDK voor de klassieke toestellen. Blijft
+// hier staan om het opnieuw te toetsen zodra myPOS erover uitsluitsel geeft.
 //
 // De demo-app houdt poort 7900 bezet zolang hij verbonden is: sluit hem eerst,
 // anders krijg je hier een weigering of stilte.
@@ -68,9 +72,7 @@ const method = args.pay
   ? "PURCHASE"
   : args.display
     ? "DISPLAY_TEXT"
-    : args.hide
-      ? "HIDE_TEXT"
-      : String(args.method ?? "GET_STATUS")
+    : String(args.method ?? "GET_STATUS")
 
 const fields = [
   ["PROTOCOL", "IPP"],

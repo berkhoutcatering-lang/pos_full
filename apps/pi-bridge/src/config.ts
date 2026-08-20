@@ -51,6 +51,10 @@ const ConfigSchema = z.object({
   // seen a real Ultra accept; NL is untested and an unsupported value comes
   // back as STATUS=3 (UNSUPPORTED PARAM) instead of a payment.
   MYPOS_TERMINAL_LANG: z.string().length(2).default("EN"),
+  // Try to put the venue's name on the terminal between payments. Off by
+  // default: a myPOS Ultra acknowledges DISPLAY_TEXT and shows nothing, and it
+  // is not in myPOS' documented method list. Flip it on if they confirm it.
+  MYPOS_TERMINAL_IDLE_SCREEN: z.coerce.boolean().default(false),
 
   // demo-api-gateway.mypos.com while testing, api-gateway.mypos.com for real
   // money. The SDK exports both as DEMO_GATEWAY_URL / PRODUCTION_GATEWAY_URL.

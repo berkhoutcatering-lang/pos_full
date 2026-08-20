@@ -65,12 +65,13 @@ async function ensureLink(): Promise<void> {
 /**
  * Between payments the terminal sits on POSLink Manager's own screen, which
  * shows the cash register's IP address and port. That is fine on a workbench
- * and wrong at a counter: the customer is looking straight at it. IPP lets the
- * cash register own that screen, so we put the venue's own name there instead.
+ * and wrong at a counter, so we tried to put the venue's own name there.
  *
- * Deliberately fail-soft. DISPLAY_TEXT is documented but we have not verified
- * every terminal accepts it, and a terminal that refuses to show a logo must
- * still be able to take money.
+ * On a myPOS Ultra that does not work: DISPLAY_TEXT is answered with STATUS=0
+ * on both stages and nothing appears. It is not in myPOS' documented method
+ * list either — it comes from their .NET SDK for the classic terminals with a
+ * simple display. Left in behind a flag that is off by default, so it costs
+ * nothing until myPOS tells us it is supported.
  */
 const IDLE_REFRESH_MS = 4 * 60_000
 
@@ -82,6 +83,7 @@ function idleRows(): string[] {
 
 export async function showIdleScreen(): Promise<void> {
   if (config.MYPOS_TRANSPORT !== "lan" || !config.MYPOS_TERMINAL_HOST) return
+  if (!config.MYPOS_TERMINAL_IDLE_SCREEN) return
   // Never paint over a payment in progress.
   if (live.size > 0) return
 
@@ -102,15 +104,25 @@ export async function showIdleScreen(): Promise<void> {
 }
 
 /**
- * Keep the venue's name on the terminal. The refresh doubles as a heartbeat:
- * it keeps the link warm, so the first payment of a quiet hour does not have
- * to spend a connection on the handshake.
+ * Heartbeat towards the terminal.
+ *
+ * A PING every few minutes keeps the link warm, so the first payment after a
+ * quiet hour does not have to spend its connection on the terminal's
+ * handshake — which is what left a customer staring at a screen without an
+ * amount on it. PING is in the documented method list and answers in a
+ * fraction of a second, so this is cheap.
  */
-export function startTerminalIdleScreen() {
-  if (config.MYPOS_TRANSPORT !== "lan") return
+export function startTerminalHeartbeat() {
+  if (config.MYPOS_TRANSPORT !== "lan" || !config.MYPOS_TERMINAL_HOST) return
+
   const tick = () => {
+    if (live.size > 0) return // a payment is already keeping the link warm
+    void ensureLink().catch((err) =>
+      logger.warn({ err: (err as Error).message }, "terminal heartbeat failed"),
+    )
     void showIdleScreen()
   }
+
   setTimeout(tick, 5_000).unref()
   setInterval(tick, IDLE_REFRESH_MS).unref()
 }
