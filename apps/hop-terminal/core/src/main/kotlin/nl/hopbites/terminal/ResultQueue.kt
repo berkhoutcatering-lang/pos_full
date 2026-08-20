@@ -1,6 +1,5 @@
 package nl.hopbites.terminal
 
-import android.content.Context
 import java.io.File
 
 /**
@@ -14,9 +13,7 @@ import java.io.File
  * halverwege wordt afgeschoten, en één regel per resultaat is genoeg. De
  * idempotency-key zit in de payload, dus dubbel aanbieden kan geen kwaad.
  */
-class ResultQueue(context: Context) {
-
-    private val file = File(context.filesDir, "pending-results.jsonl")
+class ResultQueue(private val file: File) {
 
     @Synchronized
     fun add(payload: String) {
@@ -37,4 +34,7 @@ class ResultQueue(context: Context) {
 
     @Synchronized
     fun size(): Int = peekAll().size
+
+    /** Waar de wachtrij staat — voor logging en tests. */
+    fun path(): String = file.absolutePath
 }

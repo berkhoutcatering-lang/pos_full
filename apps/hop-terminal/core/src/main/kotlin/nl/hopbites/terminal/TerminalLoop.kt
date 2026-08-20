@@ -18,6 +18,8 @@ class TerminalLoop(
     private val gateway: PaymentGateway,
     private val queue: ResultQueue,
     private val appVersion: String,
+    /** Hoe lang de klant de uitslag ziet. Nul in tests. */
+    private val resultLingerMs: Long = 8_000,
 ) {
     private val _state = MutableStateFlow<TerminalState>(TerminalState.Idle)
     val state: StateFlow<TerminalState> = _state
@@ -48,7 +50,7 @@ class TerminalLoop(
             queue.add(payload)
 
             _state.value = TerminalState.Result(payment, outcome)
-            delay(RESULT_LINGER_MS)
+            delay(resultLingerMs)
             _state.value = TerminalState.Idle
         }
     }
@@ -70,10 +72,6 @@ class TerminalLoop(
         }
     }
 
-    private companion object {
-        /** Hoe lang de klant de uitslag te zien krijgt. */
-        const val RESULT_LINGER_MS = 8_000L
-    }
 }
 
 sealed interface TerminalState {

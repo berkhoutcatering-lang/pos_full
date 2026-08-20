@@ -6,27 +6,44 @@ het IP-adres van de kassa.
 
 Ontwerp: [`docs/hop-terminal-plan.html`](../../docs/hop-terminal-plan.html).
 
-## Stand van zaken
+## Twee modules, met opzet
 
-Dit is een geraamte, geen werkende app. Wat er staat is geschreven zonder een
-toestel om op te compileren, dus reken op scherpe randjes bij de eerste build.
-Wat wél doordacht is, is de vorm: de betaling zit achter een interface, en de
-enige code die een echte Ultra nodig heeft staat apart in
-`MyposPaymentGateway.kt.todo`.
+`core` is gewone JVM-Kotlin: de lijn met de Pi, de wachtrij, de betaallus. Geen
+Android-import te bekennen, dus het compileert en test zonder toestel en zonder
+emulator. `app` wordt de dunne Android-schil eromheen.
 
-| Bestand | Wat het doet | Getest |
+| Module | Wat erin zit | Staat |
 |---|---|---|
-| `PaymentGateway.kt` | De betaling als interface, met `Approved` / `Declined` / `Unresolved` | nee |
-| `StubPaymentGateway.kt` | Doet alsof er een kaart wordt aangeboden; stuurbaar gedrag | nee |
-| `BridgeClient.kt` | Long-poll bij de Pi, resultaat terugsturen, koppelen, levensteken | nee |
-| `ResultQueue.kt` | Resultaten op schijf tot de Pi ze aanneemt | nee |
-| `TerminalLoop.kt` | Ophalen → afrekenen → melden, met herstel bij elke fout | nee |
-| `MyposPaymentGateway.kt.todo` | De Smart SDK-aanroep. Wacht op een developer-terminal | nee |
+| `core/PaymentGateway.kt` | De betaling als interface: `Approved` / `Declined` / `Unresolved` | getest |
+| `core/StubPaymentGateway.kt` | Doet alsof er een kaart wordt aangeboden; stuurbaar gedrag | getest |
+| `core/BridgeClient.kt` | Long-poll, resultaat terugsturen, koppelen, levensteken | getest |
+| `core/ResultQueue.kt` | Resultaten op schijf tot de Pi ze aanneemt | getest |
+| `core/TerminalLoop.kt` | Ophalen → afrekenen → melden, met herstel bij elke fout | getest |
+| `MyposPaymentGateway.kt.todo` | De Smart SDK-aanroep. Wacht op een developer-terminal | niet gebouwd |
+| `app/` | Activity, schermen, WiFi-binding, tokenopslag | nog leeg |
 
-De kant van de Pi is er wél al, en die is wel getest: `/terminal/next`,
+De kant van de Pi staat er ook, met elf tests: `/terminal/next`,
 `/terminal/result`, `/terminal/status` en `/terminal/claim` in
-`apps/pi-bridge/src/routes/terminal.ts`, met elf tests in
+`apps/pi-bridge/src/routes/terminal.ts` en
 `apps/pi-bridge/tests/mypos-app.spec.ts`.
+
+## Draaien
+
+Tests (twaalf, geen toestel nodig):
+
+```
+gradle :core:test
+```
+
+En de proef op de som tegen een échte pi-bridge, met de stub als kaartlezer:
+
+```
+gradle :core:demo --args="http://127.0.0.1:3009 <koppelcode>"
+```
+
+Die koppelcode haal je bij de bridge op met `/admin/issue-pair-code`. De demo
+koppelt, gaat pollen, rekent elke opdracht af en meldt hem terug — precies wat
+de app straks op de terminal doet, alleen zonder kaart.
 
 ## Zonder toestel verder bouwen
 

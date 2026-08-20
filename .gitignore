@@ -44,3 +44,8 @@ raspberry-pos-os/.pi-gen/
 raspberry-pos-os/deploy/
 raspberry-pos-os/stage-pos/02-pi-bridge/files/pi-bridge-src/
 raspberry-pos-os/stage-pos/03-pos-web/files/web-src/
+
+# Gradle-build van de terminal-app
+apps/hop-terminal/.gradle/
+apps/hop-terminal/build/
+apps/hop-terminal/*/build/
