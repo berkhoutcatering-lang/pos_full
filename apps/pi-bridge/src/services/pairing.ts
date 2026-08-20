@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from "jose"
+import { randomUUID } from "node:crypto"
 import { newId } from "../utils/ulid.js"
 import { config } from "../config.js"
 import { piDb } from "../db/outbox.js"
@@ -62,7 +63,11 @@ export async function redeemPairCode(
     return null
   }
 
-  const terminal_id = newId()
+  // UUID en geen ULID: dit veld belandt via de outbox in kolommen die uuid
+  // zijn (pos_orders.created_by_terminal_id, de state changes, de audit-log).
+  // Een ULID laat elke bestelling van deze tablet stranden op
+  // "invalid input syntax for type uuid".
+  const terminal_id = randomUUID()
   const jti = newId()
   const jwt = await new SignJWT({
     venue_id: row.venue_id,

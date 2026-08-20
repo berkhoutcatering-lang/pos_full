@@ -1,5 +1,8 @@
 import { supabaseAdmin } from "../services/audit-log.js"
 import { describeError } from "../utils/describe-error.js"
+
+/** Postgres accepteert alleen dit als uuid. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 import { config } from "../config.js"
 import { getPendingOutbox, markDelivered, markFailed } from "../db/outbox.js"
 import { logger } from "../utils/logger.js"
@@ -16,6 +19,17 @@ async function flushOnce() {
   for (const row of pending) {
     try {
       const payload = JSON.parse(row.payload_json) as Record<string, unknown>
+      // Tablets die vóór deze fix gekoppeld zijn dragen een ULID als
+      // terminal_id, en dat past niet in een uuid-kolom. Liever de herkomst
+      // kwijt dan de bestelling: zonder dit blijft een betaalde bon eeuwig
+      // hangen en staat hij nergens in de boeken.
+      if (typeof payload.terminal_id === "string" && !UUID_RE.test(payload.terminal_id)) {
+        logger.warn(
+          { id: row.id, terminal_id: payload.terminal_id },
+          "outbox row carries a non-uuid terminal_id — koppel de tablet opnieuw",
+        )
+        payload.terminal_id = null
+      }
       // P0-1 defence-in-depth: refuse to flush any row whose org_id does
       // not match this Pi's configured ORG_ID. Service-role bypasses RLS,
       // so this is the last guard before a forged row hits Supabase.
