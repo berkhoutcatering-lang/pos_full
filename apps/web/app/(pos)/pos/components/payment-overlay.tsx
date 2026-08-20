@@ -8,6 +8,7 @@ import { btwRateFor } from "@/lib/pos/btw"
 import {
   openDrawerViaPi,
   placeOrderViaPi,
+  recordPaymentViaPi,
   printKitchenViaPi,
   printReceiptViaPi,
 } from "@/lib/pi-bridge/client"
@@ -30,6 +31,8 @@ export interface AttemptKeys {
   kitchen_print_key: string
   receipt_print_key: string
   pin_idempotency_key: string
+  /** Eigen sleutel voor de betaalregel in de boeken. */
+  payment_idempotency_key: string
 }
 
 type Step = "choose" | "cash" | "pin" | "done"
@@ -200,7 +203,10 @@ export function PaymentOverlay({
     return { ok: true }
   }
 
-  const pay = async (method: CheckoutMethod) => {
+  const pay = async (
+    method: CheckoutMethod,
+    cash?: { given_cents: number; change_cents: number } | null,
+  ) => {
     if (busy) return // synchronous guard against double-tap
     setBusy(true)
     setError(null)
@@ -216,9 +222,23 @@ export function PaymentOverlay({
       setError(PAY_ERROR_TEXT[res.error] ?? res.error)
       return
     }
-    // Contant betaald → lade automatisch open (fire-and-forget; zonder
-    // drawer-kick op de printer gebeurt er gewoon niets).
-    if (method === "cash") void openDrawerViaPi()
+    if (method === "cash") {
+      // In de boeken zetten. Pin wordt door de Pi zelf geboekt zodra de
+      // terminal goedkeurt; contant weet alleen de kassa, inclusief wat er in
+      // de la ging en wat eruit kwam.
+      void recordPaymentViaPi({
+        idempotency_key: attempt.payment_idempotency_key,
+        order_id: attempt.order_id,
+        method: "cash",
+        amount_cents: priced.total_incl_cents,
+        ...(cash
+          ? { cash_given_cents: cash.given_cents, cash_change_cents: cash.change_cents }
+          : {}),
+      })
+      // Lade automatisch open (fire-and-forget; zonder drawer-kick op de
+      // printer gebeurt er gewoon niets).
+      void openDrawerViaPi()
+    }
     setPaidMethod(method)
     setStep("done")
   }
@@ -302,7 +322,7 @@ export function PaymentOverlay({
               priced={priced}
               busy={busy}
               error={error}
-              onPay={() => pay("cash")}
+              onPay={(cash) => pay("cash", cash)}
               onBack={() => setStep("choose")}
             />
           </div>

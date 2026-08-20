@@ -35,6 +35,7 @@ function freshAttempt(): AttemptKeys {
     kitchen_print_key: ulid(),
     receipt_print_key: ulid(),
     pin_idempotency_key: ulid(),
+    payment_idempotency_key: ulid(),
   }
 }
 

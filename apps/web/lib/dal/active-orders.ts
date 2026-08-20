@@ -28,19 +28,21 @@ export async function listActiveOrders(args: {
 }): Promise<ActiveOrder[]> {
   const cacheKey = `orders-${args.orgId}-${args.venueId}`
   let base: ActiveOrder[]
-  let offline = false
   try {
     base = await listActiveOrdersOnline(args)
     void offlineCacheWrite(cacheKey, base)
   } catch (err) {
     if (!isNetworkError(err)) throw err
     // Pi without internet: last-good Supabase snapshot…
-    offline = true
     base = (await offlineCacheRead<ActiveOrder[]>(cacheKey)) ?? []
   }
-  if (!offline) return base
-  // …overlaid with what's still queued in the Pi-bridge outbox, so orders
-  // placed during the outage reach the KDS/CFD (not only the printer).
+  // …altijd overlaid met wat nog in de Pi-outbox staat. De kassa plaatst
+  // Pi-first: een bon leeft eerst alleen in de outbox en komt pas in
+  // Supabase als de flush-worker hem kwijt kan. Overlayden we alleen bij
+  // een netwerkfout, dan is een betaalde bon onzichtbaar op KDS/CFD zodra
+  // Supabase wél leesbaar is maar de flush achterloopt of faalt — precies
+  // het geval waarin niemand het merkt. De overlay dedupt op order_id, dus
+  // online kost het niks en al geflushte bonnen blijven leidend.
   return overlayPendingOutbox(base, args)
 }
 

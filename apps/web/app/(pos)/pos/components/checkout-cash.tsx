@@ -15,7 +15,7 @@ export function CheckoutCash({
   priced: PricedCart
   busy: boolean
   error: string | null
-  onPay: () => void
+  onPay: (cash: { given_cents: number; change_cents: number } | null) => void
   onBack: () => void
 }) {
   const [given, setGiven] = useState<string>("")
@@ -104,7 +104,13 @@ export function CheckoutCash({
           size="lg"
           fullWidth
           disabled={busy || !calc}
-          onClick={onPay}
+          onClick={() =>
+            onPay(
+              calc
+                ? { given_cents: givenCents, change_cents: calc.change_cents }
+                : null,
+            )
+          }
           data-testid="cash-confirm"
         >
           {busy ? "Bezig…" : "Bevestig contante betaling"}

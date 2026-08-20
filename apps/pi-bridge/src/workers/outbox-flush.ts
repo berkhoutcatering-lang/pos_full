@@ -58,6 +58,11 @@ async function flushOnce() {
         // ingest-RPC vertaalt en is idempotent op idempotency_key.
         const { error } = await supabaseAdmin.rpc("ingest_pos_order", { p: payload })
         if (error) throw error
+      } else if (row.table_name === "pos_payments") {
+        // Zelfde reden als bij de orders: de payload past niet 1-op-1 op de
+        // tabel (enums, paid_at op de bestelling) en de RPC is idempotent.
+        const { error } = await supabaseAdmin.rpc("ingest_pos_payment", { p: payload })
+        if (error) throw error
       } else if (row.table_name === "pos_order_state_changes") {
         const { error } = await supabaseAdmin.rpc("ingest_pos_state_change", { p: payload })
         if (error) throw error

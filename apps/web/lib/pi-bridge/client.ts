@@ -212,6 +212,29 @@ export function printReceiptViaPi(payload: PrintReceiptPayload) {
   )
 }
 
+export interface RecordPaymentPayload {
+  idempotency_key: string
+  order_id: string
+  /** Pin niet: die boekt de Pi zelf op het moment dat de terminal goedkeurt. */
+  method: "cash" | "ideal" | "gift_card" | "other"
+  amount_cents: number
+  cash_given_cents?: number
+  cash_change_cents?: number
+}
+
+/**
+ * De betaling in de boeken zetten.
+ *
+ * Zonder dit staat een contante verkoop nergens: de bon is geprint en de
+ * bestelling afgerond, maar de dagafsluiting kan contant en pin niet splitsen.
+ */
+export function recordPaymentViaPi(payload: RecordPaymentPayload) {
+  return call<{ ok: boolean; queued: boolean; dedup?: boolean }>("/orders/payment", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
 export function openDrawerViaPi() {
   return call<{ ok: boolean; soft_error?: string }>("/print/drawer", {
     method: "POST",

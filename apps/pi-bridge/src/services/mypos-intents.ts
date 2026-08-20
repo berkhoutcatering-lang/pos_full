@@ -1,5 +1,6 @@
 import { piDb } from "../db/outbox.js"
 import { writeAuditEvent } from "./audit-log.js"
+import { recordPayment } from "./payments.js"
 
 /**
  * The SQLite intent mirror behind every PIN payment, shared by both
@@ -148,5 +149,21 @@ export async function captureOnce(idempotency_key: string) {
     },
     actor_terminal_id: row.actor_terminal_id ?? "unknown",
     venue_id: row.venue_id,
+  })
+
+  // En in de boeken. De audit-log bewijst dát er betaald is; pos_payments is
+  // waar de dagafsluiting contant en pin uit elkaar houdt en waar het
+  // transactienummer staat waarmee je een bedrag op het bankafschrift
+  // terugvindt.
+  recordPayment({
+    // Afgeleid van de betaalsleutel, zodat opnieuw aanbieden geen tweede
+    // betaalregel oplevert — de betaling is al idempotent op deze sleutel.
+    idempotency_key: idempotency_key,
+    order_id: row.order_id,
+    venue_id: row.venue_id,
+    method: "pin",
+    status: "captured",
+    amount_cents: row.amount_cents,
+    mypos_transaction_id: row.transaction_id,
   })
 }

@@ -5,6 +5,7 @@ import { enqueueOutbox, getOutboxPayload, nextQueueNumber } from "../db/outbox.j
 import { writeAuditEvent } from "../services/audit-log.js"
 import { ULID_RE } from "../utils/ulid.js"
 import { asUuidOrNull } from "../utils/uuid.js"
+import { recordPayment } from "../services/payments.js"
 import { config } from "../config.js"
 
 // PWA writes orders here over LAN. Pi enqueues to outbox FIRST so the
@@ -44,6 +45,18 @@ const UpdateStateSchema = z.object({
   order_id: z.string().uuid(),
   // "placed" = terug-transitie (kaart teruggesleept op de KDS).
   state: z.enum(["placed", "preparing", "ready", "served", "voided"]),
+})
+
+const PaymentSchema = z.object({
+  idempotency_key: z.string().regex(ULID_RE),
+  order_id: z.string().uuid(),
+  // Pin wordt door de bridge zelf geboekt op het moment dat de terminal
+  // goedkeurt; zou de kassa dat óók doen, dan stond dezelfde betaling twee keer
+  // in de boeken onder twee sleutels.
+  method: z.enum(["cash", "ideal", "gift_card", "other"]),
+  amount_cents: z.number().int().positive().max(1_000_000),
+  cash_given_cents: z.number().int().nonnegative().max(1_000_000).optional(),
+  cash_change_cents: z.number().int().nonnegative().max(1_000_000).optional(),
 })
 
 export async function orderRoutes(app: FastifyInstance) {
@@ -142,6 +155,48 @@ export async function orderRoutes(app: FastifyInstance) {
       }
 
       return reply.send({ ok: true, queued: true })
+    },
+  )
+
+  // Contant afrekenen. De kassa weet wat er in de la ging en wat eruit kwam;
+  // de Pi weet dat van een pinbetaling en boekt die zelf.
+  app.post(
+    "/orders/payment",
+    { preHandler: authenticateTablet },
+    async (req, reply) => {
+      const parsed = PaymentSchema.safeParse(req.body)
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "validation", issues: parsed.error.issues })
+      }
+      const claims = req.tabletClaims!
+
+      const enqueued = recordPayment({
+        idempotency_key: parsed.data.idempotency_key,
+        order_id: parsed.data.order_id,
+        venue_id: claims.venue_id,
+        method: parsed.data.method,
+        status: "captured",
+        amount_cents: parsed.data.amount_cents,
+        cash_given_cents: parsed.data.cash_given_cents ?? null,
+        cash_change_cents: parsed.data.cash_change_cents ?? null,
+      })
+
+      if (!enqueued.enqueued) {
+        return reply.code(503).send({ error: enqueued.reason ?? "outbox_unavailable" })
+      }
+
+      await writeAuditEvent({
+        event_type: "payment.captured",
+        payload: {
+          order_id: parsed.data.order_id,
+          amount_cents: parsed.data.amount_cents,
+          method: parsed.data.method,
+        },
+        actor_terminal_id: claims.terminal_id,
+        venue_id: claims.venue_id,
+      })
+
+      return reply.send({ ok: true, queued: true, dedup: enqueued.reason === "duplicate" })
     },
   )
 }
