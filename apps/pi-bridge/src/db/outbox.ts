@@ -146,6 +146,8 @@ addColumnIfMissing("mypos_intents", "actor_terminal_id", "TEXT")
 addColumnIfMissing("mypos_intents", "captured_at", "INTEGER")
 addColumnIfMissing("mypos_intents", "status_code", "TEXT")
 addColumnIfMissing("mypos_intents", "last_error", "TEXT")
+// Bongegevens zoals de terminal-app ze teruggaf (autorisatiecode, RRN, schema).
+addColumnIfMissing("mypos_intents", "receipt_json", "TEXT")
 
 export interface OutboxRow {
   id: number

@@ -24,6 +24,11 @@ import {
   pollLanStatus,
   startLanTransaction,
 } from "./mypos-lan.js"
+import {
+  cancelAppTransaction,
+  pollAppStatus,
+  startAppTransaction,
+} from "./mypos-app.js"
 
 // myPOS PIN payments over the ePOS API.
 //
@@ -224,6 +229,7 @@ export async function startMyPosTransaction(
 ): Promise<MyPosStartResult> {
   if (config.MYPOS_TRANSPORT === "off") throw new Error("mypos_disabled")
   if (config.MYPOS_TRANSPORT === "lan") return startLanTransaction(args)
+  if (config.MYPOS_TRANSPORT === "app") return startAppTransaction(args)
 
   const existing = findIntent(args.idempotency_key)
   if (existing) {
@@ -314,6 +320,7 @@ export interface MyPosPollResult {
 
 export async function pollMyPosStatus(handle: string): Promise<MyPosPollResult> {
   if (config.MYPOS_TRANSPORT === "lan") return pollLanStatus(handle)
+  if (config.MYPOS_TRANSPORT === "app") return pollAppStatus(handle)
 
   const row = findIntent(handle)
   if (!row) throw new Error("mypos_unknown_transaction")
@@ -407,6 +414,10 @@ export async function cancelMyPosTransaction(
 ): Promise<{ cancelled: boolean; status: NormalizedStatus; message?: string }> {
   if (config.MYPOS_TRANSPORT === "lan") {
     const { status, message } = cancelLanTransaction(handle)
+    return { cancelled: true, status, message }
+  }
+  if (config.MYPOS_TRANSPORT === "app") {
+    const { status, message } = cancelAppTransaction(handle)
     return { cancelled: true, status, message }
   }
 

@@ -1,0 +1,42 @@
+package nl.hopbites.terminal
+
+/*
+ * DE ENIGE CODE DIE EEN ECHT TOESTEL NODIG HEEFT.
+ *
+ * Bewust nog geen .kt: dit compileert pas als de Smart SDK erbij zit, en dat
+ * kan niemand toetsen zonder een Ultra op tafel. Hernoem naar
+ * MyposPaymentGateway.kt zodra fase 0 rond is (developer-terminal binnen,
+ * adb install werkend) en zet in app/build.gradle.kts de dependency erbij:
+ *
+ *     implementation("com.mypos:mypossmartsdk:1.0.8")
+ *
+ * Hoe het werkt volgens myPOS' eigen README:
+ *
+ *   MyPOSAPI.openPaymentActivity(activity, payment, REQUEST_CODE)
+ *
+ * waarbij `payment` een MyPOSPayment is (bedrag in de valuta van het toestel,
+ * plus een foreign transaction id — daar zetten we onze idempotency-key in).
+ * Het antwoord komt terug in onActivityResult() met twee extras: een `status`
+ * uit TransactionProcessingResult en een boolean `transaction_approved`.
+ *
+ * Waar het bij het schrijven op aankomt:
+ *
+ *  - Alles wat GEEN duidelijk "goedgekeurd" of "geweigerd" is, is
+ *    PaymentOutcome.Unresolved. Een SDK die halverwege afbreekt betekent niet
+ *    dat er niets gebeurd is; de kaart kan belast zijn. Nooit gokken.
+ *  - De bongegevens (autorisatiecode, RRN, STAN, gemaskeerd pannummer,
+ *    kaartschema) komen uit de intent-extras van het resultaat. Die hebben we
+ *    nodig voor de bon en de audit-log — zie Receipt.
+ *  - MyPOSAPI.registerPOSInfo() geeft TID, valuta en merchantgegevens. Stuur
+ *    die één keer mee bij het koppelen, zodat /admin weet welk toestel dit is.
+ *  - openPaymentActivity() is een Activity-aanroep, dus de suspend-functie
+ *    hieronder moet wachten op onActivityResult. Een CompletableDeferred die
+ *    de Activity invult is de eenvoudigste brug.
+ *
+ * Wat NIET moet:
+ *
+ *  - Zelf iets met kaartgegevens doen. Die blijven in de gecertificeerde kern
+ *    van het toestel; wij zien alleen het gemaskeerde nummer.
+ *  - Het bedrag omrekenen. De Pi stuurt centen, de SDK wil euro's — die
+ *    conversie staat op één plek en nergens anders (zie amountCents / 100.0).
+ */

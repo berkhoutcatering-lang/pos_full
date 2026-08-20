@@ -41,7 +41,9 @@ const ConfigSchema = z.object({
   // The LAN route was long thought impossible (the terminal answered nobody);
   // it turned out the listener is POSLink Manager with its connection type set
   // to WIFI (TCP/IP). Confirmed end-to-end on 2026-08-19.
-  MYPOS_TRANSPORT: z.enum(["off", "lan", "cloud"]).default("off"),
+  //   app    Onze eigen app op de terminal haalt de betaling op bij de Pi.
+  //          Zie docs/hop-terminal-plan.html.
+  MYPOS_TRANSPORT: z.enum(["off", "lan", "app", "cloud"]).default("off"),
 
   // LAN route: where the terminal listens. Port is configurable in POSLink
   // Manager (Settings -> Edit port) and is not the same on every device.
@@ -115,6 +117,10 @@ const ConfigSchema = z.object({
         path: [field],
         message: `${field} is required when MYPOS_TRANSPORT=${c.MYPOS_TRANSPORT}`,
       })
+
+    // De app-route heeft geen sleutels en geen adres nodig: de terminal
+    // meldt zich zelf bij de Pi.
+    if (c.MYPOS_TRANSPORT === "app") return
 
     if (c.MYPOS_TRANSPORT === "lan") {
       if (!c.MYPOS_TERMINAL_HOST) missing("MYPOS_TERMINAL_HOST")

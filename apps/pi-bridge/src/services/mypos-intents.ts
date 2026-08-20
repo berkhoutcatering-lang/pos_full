@@ -49,6 +49,8 @@ export interface IntentRow {
   captured_at: number | null
   status_code: string | null
   last_error: string | null
+  /** Bongegevens van de terminal-app, als JSON. */
+  receipt_json: string | null
   created_at: number
 }
 

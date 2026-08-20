@@ -3,6 +3,7 @@ import { outboxCounts } from "../db/outbox.js"
 import { config } from "../config.js"
 import { getUplinkStatus } from "../services/uplink.js"
 import { pgCache, pgCacheDurable } from "../db/pglite-cache.js"
+import { getTerminalStatus, terminalOnline } from "../services/mypos-app.js"
 
 // Public liveness for Docker HEALTHCHECK is just `{status:"ok"}`.
 // Detailed health behind x-admin-token so attackers can't fingerprint the
@@ -36,6 +37,9 @@ export async function healthRoute(app: FastifyInstance) {
         mypos_terminal_id: config.MYPOS_TID ?? null,
         mypos_gateway:
           config.MYPOS_TRANSPORT === "cloud" ? config.MYPOS_GATEWAY_URL : null,
+        // Alleen gevuld op de app-route: onze eigen app op de terminal.
+        terminal_app_online: terminalOnline(),
+        terminal_app: getTerminalStatus(),
         pglite_ok: pgliteOk,
         // False = read-cache draait in RAM en is na een herstart leeg.
         pglite_durable: pgCacheDurable,
