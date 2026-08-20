@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify"
 import { adminOnly } from "../middleware/admin-only.js"
-import { piDb } from "../db/outbox.js"
+import { listFailedOutbox, piDb, requeueFailed } from "../db/outbox.js"
 
 // Undelivered order mutations, for the web app that runs ON the Pi.
 // When Supabase is unreachable (truck without internet) the KDS/CFD SSR
@@ -44,6 +44,31 @@ export async function outboxPendingRoutes(app: FastifyInstance) {
           created_at: r.created_at,
         })),
       })
+    },
+  )
+
+  // Wat er is blijven liggen nadat de aflevering bleef mislukken. Dit zijn
+  // bestellingen die niet in de boekhouding staan, dus ze horen zichtbaar te
+  // zijn in plaats van stilletjes in een tabel te verdwijnen.
+  app.get(
+    "/admin/outbox/failed",
+    { preHandler: adminOnly },
+    async (_req, reply) => {
+      const rows = listFailedOutbox(100)
+      return reply.send({ failed: rows, count: rows.length })
+    },
+  )
+
+  // Terugzetten in de wachtrij, nadat de oorzaak is weggenomen. Veilig te
+  // herhalen: de idempotency-key gaat mee en de ingest aan de Supabase-kant is
+  // daarop idempotent.
+  app.post(
+    "/admin/outbox/requeue",
+    { preHandler: adminOnly },
+    async (req, reply) => {
+      const body = (req.body ?? {}) as { ids?: number[] }
+      const count = requeueFailed(Array.isArray(body.ids) ? body.ids : undefined)
+      return reply.send({ requeued: count })
     },
   )
 }

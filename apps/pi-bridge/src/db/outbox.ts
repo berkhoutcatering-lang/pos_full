@@ -289,6 +289,71 @@ export function markFailed(row: OutboxRow, error: string) {
   }
 }
 
+export interface FailedRow {
+  id: number
+  original_id: number
+  idempotency_key: string
+  operation: string
+  table_name: string
+  venue_id: string
+  failed_at: number
+  final_error: string | null
+}
+
+/** Wat er is blijven liggen. Dit zijn bestellingen die de boekhouding misten. */
+export function listFailedOutbox(limit = 50): FailedRow[] {
+  return piDb
+    .prepare(
+      `SELECT id, original_id, idempotency_key, operation, table_name, venue_id,
+              failed_at, final_error
+       FROM outbox_failed ORDER BY failed_at DESC LIMIT ?`,
+    )
+    .all(limit) as FailedRow[]
+}
+
+/**
+ * Zet mislukte rijen terug in de wachtrij.
+ *
+ * Bedoeld voor nadat de oorzaak is weggenomen: de payload is bewaard, de
+ * idempotency-key ook, dus opnieuw aanbieden kan geen dubbele bestelling
+ * opleveren — de ingest-RPC aan de Supabase-kant is idempotent op die sleutel.
+ */
+export function requeueFailed(ids?: number[]): number {
+  const rows = (
+    ids && ids.length > 0
+      ? piDb
+          .prepare(
+            `SELECT * FROM outbox_failed WHERE id IN (${ids.map(() => "?").join(",")})`,
+          )
+          .all(...ids)
+      : piDb.prepare("SELECT * FROM outbox_failed").all()
+  ) as Array<{
+    id: number
+    idempotency_key: string
+    operation: string
+    table_name: string
+    payload_json: string
+    venue_id: string
+  }>
+
+  const tx = piDb.transaction(() => {
+    for (const r of rows) {
+      piDb
+        .prepare(
+          `INSERT INTO outbox (idempotency_key, operation, table_name, payload_json,
+                               venue_id, created_at, attempts, next_retry_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, NULL)`,
+        )
+        .run(r.idempotency_key, r.operation, r.table_name, r.payload_json, r.venue_id, Date.now())
+      piDb.prepare("DELETE FROM outbox_failed WHERE id = ?").run(r.id)
+    }
+  })
+  tx()
+
+  logger.warn({ count: rows.length }, "failed outbox rows requeued")
+  return rows.length
+}
+
 const PRINT_DEDUP_TTL_MS = 24 * 60 * 60 * 1000
 
 export function checkAndMarkPrint(args: {

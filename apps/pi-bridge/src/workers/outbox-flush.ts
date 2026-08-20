@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "../services/audit-log.js"
+import { describeError } from "../utils/describe-error.js"
 import { config } from "../config.js"
 import { getPendingOutbox, markDelivered, markFailed } from "../db/outbox.js"
 import { logger } from "../utils/logger.js"
@@ -63,7 +64,7 @@ async function flushOnce() {
       }
       markDelivered(row.id)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = describeError(err)
       markFailed(row, msg)
       logger.warn({ id: row.id, err: msg }, "outbox flush failed; will retry")
     }
