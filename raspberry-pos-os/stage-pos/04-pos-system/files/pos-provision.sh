@@ -45,7 +45,19 @@ if [ ! -f "${POS_ENV}" ]; then
 fi
 
 CLEAN="${RUN_DIR}/pos.env.clean"
-sed -e 's/\r$//' -e '1s/^\xEF\xBB\xBF//' "${POS_ENV}" > "${CLEAN}"
+# Dit bestand wordt zo meteen als shell ingelezen, en dan is `KEY= waarde` geen
+# toewijzing maar "zet KEY leeg en voer `waarde` uit als commando". De variabele
+# blijft leeg en de fout verdwijnt in de log. Op 2026-08-20 kostte precies dat
+# een avond zoeken naar een access point dat nooit aanging. Spaties rond het
+# isgelijkteken gaan er daarom uit; spaties binnen een waarde blijven staan,
+# want een SSID of wachtwoord mag ze bevatten.
+if grep -qE '^[A-Za-z_][A-Za-z0-9_]*([[:space:]]+=|=[[:space:]]+[^[:space:]])' "${POS_ENV}"; then
+  WARNINGS+=("pos.env had spaties rond een '=' — die zijn genegeerd. Schrijf KEY=waarde zonder spaties eromheen.")
+fi
+sed -e 's/\r$//' -e '1s/^\xEF\xBB\xBF//' \
+    -e 's/[[:space:]]*$//' \
+    -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)[[:space:]]*=[[:space:]]*/\1=/' \
+    "${POS_ENV}" > "${CLEAN}"
 chmod 600 "${CLEAN}"
 
 # Defaults, then user values.
