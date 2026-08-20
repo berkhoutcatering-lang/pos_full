@@ -63,11 +63,29 @@ ODD=$(grep -nvE '^[[:space:]]*(#|$)|^[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=' "${POS
 if [ -n "${ODD}" ]; then
   WARNINGS+=("pos.env: regel(s) ${ODD}zijn geen comment en geen KEY=waarde — waarschijnlijk afgebroken regels. Ze worden genegeerd.")
 fi
+# De laatste vier expressies zetten alles wat geen comment, lege regel of
+# toewijzing is om in een comment. Dat is niet netjesheid maar zelfbehoud: op
+# 2026-08-20 stond er `tethering ->` op een losgeraakte regel, en die '>' is
+# voor de shell een omleiding. Eén syntaxfout breekt het inlezen af op dat
+# punt, waarna elke instelling die eronder staat stilletjes op zijn default
+# blijft — in dit geval het access point, dat 109 regels lager stond.
 sed -e 's/\r$//' -e '1s/^\xEF\xBB\xBF//' \
     -e 's/[[:space:]]*$//' \
     -e 's/^\([A-Za-z_][A-Za-z0-9_]*\)[[:space:]]*=[[:space:]]*/\1=/' \
+    -e '/^[[:space:]]*#/b' \
+    -e '/^$/b' \
+    -e '/^[A-Za-z_][A-Za-z0-9_]*=/b' \
+    -e 's/^/# /' \
     "${POS_ENV}" > "${CLEAN}"
 chmod 600 "${CLEAN}"
+
+# Blijft er dan nóg iets over dat de shell niet kan lezen — een waarde met een
+# openstaand aanhalingsteken bijvoorbeeld — dan stopt het inlezen halverwege en
+# draait de kassa verder op defaults die niemand heeft gekozen. Dat is erger dan
+# niet starten, dus dat is een harde fout.
+if ! bash -n "${CLEAN}" 2>/dev/null; then
+  ERRORS+=("pos.env bevat een syntaxfout (let op aanhalingstekens); alles onder die regel wordt genegeerd. Vergelijk met pos.env.template.")
+fi
 
 # Defaults, then user values.
 ORG_ID="" VENUE_ID="" SUPABASE_URL="" SUPABASE_SERVICE_ROLE_KEY=""
