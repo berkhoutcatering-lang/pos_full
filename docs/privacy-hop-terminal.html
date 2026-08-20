@@ -177,7 +177,7 @@
     <p class="eyebrow">Privacyverklaring · app op de betaalterminal</p>
     <h1>Hop Terminal</h1>
     <p class="lede">Deze app draait op de betaalterminal aan de balie van Hop&nbsp;&amp;&nbsp;Bites. Hij toont het te betalen bedrag, laat je de kaart aanbieden en geeft de uitslag door aan de kassa. Verder doet hij niets — en dat is hier vrij letterlijk bedoeld.</p>
-    <p class="meta">Laatst bijgewerkt: 20 augustus 2026</p>
+    <p class="meta">Laatst bijgewerkt: 20 augustus 2026 · <a href="#english">English version below</a></p>
   </header>
 
   <section>
@@ -256,12 +256,67 @@
     </ul>
   </section>
 
-  <section class="en">
-    <h2>English summary</h2>
-    <p>Hop Terminal runs on the payment terminal at the Hop&nbsp;&amp;&nbsp;Bites counter. It shows the amount due, lets the customer present a card, and reports the outcome back to our cash register over the local network in the food truck.</p>
-    <p>The app never sees card data: reading the card, PIN entry and the connection to the bank all happen inside the certified payment core of the myPOS terminal. The app only receives the result — approved or declined, an authorisation code, a transaction reference, the card scheme and the last four digits.</p>
-    <p>The app collects no names, e-mail addresses, phone numbers or location data. It contains no advertising, no analytics and no user accounts, and it sends nothing to the internet. Order and payment records are kept in our own cash register administration for seven years, as required by Dutch tax law.</p>
-    <p>Questions or a data request: <a href="mailto:berkhout.catering@gmail.com">berkhout.catering@gmail.com</a>.</p>
+  <section class="en" id="english">
+    <h2>Privacy statement (English)</h2>
+    <p>This is a translation of the Dutch text above, which is the authoritative version for our customers.</p>
+
+    <h3 style="font-size:1.15rem;font-weight:700;color:var(--ink);margin:0.5rem 0 0">Who is responsible</h3>
+    <p>Hop &amp; Bites, Boelensstraat 21, 7848 CS Schoonoord, the Netherlands. Chamber of Commerce 80189458, VAT number NL003401176870. Questions or a data request: <a href="mailto:berkhout.catering@gmail.com">berkhout.catering@gmail.com</a>. You will get an answer within one month.</p>
+
+    <h3 style="font-size:1.15rem;font-weight:700;color:var(--ink);margin:0.5rem 0 0">What the app processes</h3>
+    <p>Hop Terminal runs on the payment terminal at our counter. It receives an instruction from our cash register, lets the terminal handle the payment, and reports the outcome back. All of that stays on the local network in the food truck.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Data</th><th>Purpose</th><th>How long on the terminal</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Amount due and order number</td>
+            <td>Showing the amount and linking the payment to the right order</td>
+            <td>Until the payment is finished</td>
+          </tr>
+          <tr>
+            <td>Payment outcome: approved or declined, authorisation code, transaction reference, card scheme and the last four digits of the card</td>
+            <td>Printing the receipt and keeping the books straight</td>
+            <td>Until the cash register confirms receipt, then deleted</td>
+          </tr>
+          <tr>
+            <td>Terminal pairing key</td>
+            <td>So that only our own cash register can drive this terminal</td>
+            <td>Until the device is unpaired</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>What it does <strong>not</strong> collect: no names, no e-mail addresses, no phone numbers, no location data, no advertising, no analytics, no user accounts.</p>
+
+    <h3 style="font-size:1.15rem;font-weight:700;color:var(--ink);margin:0.5rem 0 0">Card data never passes through the app</h3>
+    <p>Reading the card, PIN entry and the connection to the bank all happen inside the certified payment core of the myPOS terminal. Our app only receives the result: approved or not, with a transaction reference, the card scheme and the last four digits. The full card number and the PIN are invisible to us and are never stored.</p>
+
+    <h3 style="font-size:1.15rem;font-weight:700;color:var(--ink);margin:0.5rem 0 0">Where the data goes</h3>
+    <p>The app speaks only to our cash register, over the local network in the food truck. Nothing goes to the internet from the app — not to us, not to third parties.</p>
+    <p>The payment itself is handled by myPOS, which is a payment service provider with its own responsibility for card data. Their terms and privacy statement are at <a href="https://www.mypos.com" rel="noopener">mypos.com</a>.</p>
+    <p>Orders and receipts are kept in our own cash register administration for seven years, as required by Dutch tax law.</p>
+
+    <h3 style="font-size:1.15rem;font-weight:700;color:var(--ink);margin:0.5rem 0 0">Legal basis</h3>
+    <p>Handling the payment: performance of a contract — you buy something and pay for it. Keeping the receipt and the transaction record: a legal obligation, namely the Dutch fiscal retention period.</p>
+
+    <h3 style="font-size:1.15rem;font-weight:700;color:var(--ink);margin:0.5rem 0 0">Your rights</h3>
+    <ul>
+      <li>You can ask what data we hold about an order.</li>
+      <li>You can ask for corrections if something is wrong.</li>
+      <li>Erasure within those seven years is usually not possible: Dutch tax law requires us to keep the transaction. That obligation takes precedence over the right to be forgotten, and we will explain that if you ask.</li>
+      <li>You can lodge a complaint with the Dutch Data Protection Authority (Autoriteit Persoonsgegevens).</li>
+    </ul>
+
+    <h3 style="font-size:1.15rem;font-weight:700;color:var(--ink);margin:0.5rem 0 0">Security</h3>
+    <ul>
+      <li>Traffic between the terminal and the cash register is encrypted, and the terminal must first be paired using a code issued by the manager.</li>
+      <li>The terminal holds only what the payment in progress needs.</li>
+      <li>An outcome the cash register has not confirmed yet stays on the device until it has — so a payment is never lost — and is deleted afterwards.</li>
+      <li>A terminal that goes missing can be unpaired remotely by the manager.</li>
+    </ul>
   </section>
 
   <footer>
