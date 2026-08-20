@@ -23,9 +23,12 @@ bereikt het toestel nooit.
 
 ## Short description
 
-> Companion app for the Hop & Bites point-of-sale. Shows the amount due and
-> takes the card payment, driven by our own cash register over the local
-> network.
+Het veld staat op minder dan 80 tekens; dit is er 67.
+
+> Payment screen for the Hop & Bites cash register. Pairing required.
+
+"Pairing required" staat er niet voor niets in: het is het eerste wat een
+reviewer tegenkomt als hij de app zonder onze kassa opent.
 
 ## Long description
 
