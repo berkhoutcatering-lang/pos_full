@@ -76,9 +76,9 @@ interface Seen {
  * weigert hij omdat er nog iets van hem openstaat, en pas nadat die met
  * COMPLETE_TX is afgesloten neemt hij een nieuwe aan.
  */
-function fakeTerminal(opts: { refuseFirstPurchase: boolean }) {
+function fakeTerminal(opts: { openSid?: string } = {}) {
   const seen: Seen[] = []
-  let purchases = 0
+  let open = opts.openSid ?? null
 
   const server = net.createServer((socket) => {
     let buf = Buffer.alloc(0)
@@ -92,9 +92,26 @@ function fakeTerminal(opts: { refuseFirstPurchase: boolean }) {
         const reply = (fields: Array<[string, string]>) =>
           socket.write(encodeFrame([["PROTOCOL", "IPP"], ["METHOD", f.METHOD], ...fields]))
 
+        // Zolang er iets openstaat weigert hij alles, en vertelt hij bij
+        // GET_STATUS welke transactie dat is — precies zoals de Ultra deed.
+        if (f.METHOD === "GET_STATUS") {
+          reply([["STAGE", "1"], ["STATUS", "0"], ["TIMEOUT", "30"]])
+          reply(
+            open
+              ? [["STAGE", "5"], ["STATUS", "20"], ["SID_ORIGINAL", open], ["TX_STATUS", "0"], ["RRN", "623214780634"]]
+              : [["STAGE", "5"], ["STATUS", "0"]],
+          )
+          return
+        }
+
+        if (f.METHOD === "COMPLETE_TX") {
+          if (open && f.SID_ORIGINAL === open) open = null
+          reply([["STAGE", "5"], ["STATUS", open ? "17" : "0"]])
+          return
+        }
+
         if (f.METHOD === "PURCHASE") {
-          purchases++
-          if (opts.refuseFirstPurchase && purchases === 1) {
+          if (open) {
             reply([["STAGE", "1"], ["STATUS", "20"]])
             return
           }
@@ -109,7 +126,7 @@ function fakeTerminal(opts: { refuseFirstPurchase: boolean }) {
           ])
           return
         }
-        // PING en COMPLETE_TX zijn in één klap klaar.
+        // PING is in één klap klaar.
         reply([["STAGE", "5"], ["STATUS", "0"]])
       }
     })
@@ -143,7 +160,7 @@ beforeEach(() => {
 
 describe("pinnen over de LAN", () => {
   it("sluit de transactie af bij de terminal en boekt de betaling", async () => {
-    const term = fakeTerminal({ refuseFirstPurchase: false })
+    const term = fakeTerminal()
     await term.listen()
     try {
       const started = await startLanTransaction(args)
@@ -165,18 +182,10 @@ describe("pinnen over de LAN", () => {
   })
 
   it("maakt een blijven hangende transactie zelf los en zet het bedrag opnieuw klaar", async () => {
-    // Eerst een betaling die wél door mag, zodat er een sessie-id bekend is om
-    // mee af te sluiten — precies wat de bridge in de praktijk heeft.
-    const warmup = fakeTerminal({ refuseFirstPurchase: false })
-    await warmup.listen()
-    await startLanTransaction(args)
-    await settled()
-    warmup.close()
-
-    piDb.prepare("UPDATE mypos_intents SET idempotency_key = ? WHERE idempotency_key = ?")
-      .run("01M0E0TMAWX1Q2FD5AR4WMPV73", KEY)
-
-    const term = fakeTerminal({ refuseFirstPurchase: true })
+    // Wat er op 20 augustus 2026 aan de balie stond: een geslaagde betaling van
+    // 16:10 die nooit was afgesloten, waarna de terminal alles weigerde.
+    const STUCK = "5d381ec3-6a93-4210-9612-0ce7bfdb13c2"
+    const term = fakeTerminal({ openSid: STUCK })
     await term.listen()
     try {
       await startLanTransaction(args)
@@ -185,7 +194,8 @@ describe("pinnen over de LAN", () => {
       // De klant merkt er niets van: de betaling gaat gewoon door.
       expect(row.status).toBe("approved")
       expect(term.seen.filter((s) => s.method === "PURCHASE")).toHaveLength(2)
-      expect(term.seen.some((s) => s.method === "COMPLETE_TX")).toBe(true)
+      // En hij gokt niet: de terminal noemt zelf welke transactie dicht moet.
+      expect(term.seen.find((s) => s.method === "COMPLETE_TX")?.sidOriginal).toBe(STUCK)
     } finally {
       term.close()
     }

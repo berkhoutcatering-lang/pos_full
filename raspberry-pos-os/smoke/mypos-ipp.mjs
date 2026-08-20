@@ -30,8 +30,9 @@
 // myPOS' methodelijst en komt uit hun SDK voor de klassieke toestellen. Blijft
 // hier staan om het opnieuw te toetsen zodra myPOS erover uitsluitsel geeft.
 //
-// De demo-app houdt poort 7900 bezet zolang hij verbonden is: sluit hem eerst,
-// anders krijg je hier een weigering of stilte.
+// Poort 7901 is waar de Ultra luistert; de bridge gebruikt hetzelfde. De
+// demo-app houdt hem bezet zolang die verbonden is: sluit hem eerst, anders
+// krijg je hier een weigering of stilte.
 
 import net from "node:net"
 import crypto from "node:crypto"
@@ -46,7 +47,7 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 
 const HOST = args.host ?? "192.168.1.135"
-const PORT = Number(args.port ?? 7900)
+const PORT = Number(args.port ?? 7901)
 // De terminal antwoordde met CURRENT_VERSION=202 terwijl de demo-app 200
 // stuurt. Daarom is 202 hier de standaard — met --version 200 vergelijk je.
 const VERSION = String(args.version ?? 202)

@@ -281,19 +281,69 @@ function armedTerminal(frames: IppFields[]): boolean {
 }
 
 /**
+ * Vragen wat de terminal van zichzelf vindt.
+ *
+ * GET_STATUS leest alleen en antwoordt in een fractie van een seconde met zijn
+ * hele staat: serienummer, software, en — als er een transactie is blijven
+ * openstaan — STATUS=20 mét het SID_ORIGINAL, de bedragen en de RRN van die
+ * transactie. Hij vertelt dus zelf welke betaling hem tegenhoudt.
+ */
+async function askTerminalStatus(): Promise<IppFields> {
+  const session = runIppMethod({ ...terminal(), method: "GET_STATUS" })
+  const final = await session.done
+  lastContactAt = Date.now()
+  return final
+}
+
+/**
  * Een blijven hangende transactie op de terminal opruimen.
  *
- * Hij noemt niet wélke transactie openstaat, dus lopen we de sessie-ids van de
- * laatste betalingen af tot er één wordt geaccepteerd. Een id dat hij niet kent
- * levert STATUS=17 op en verandert niets — dit kost hooguit een paar seconden
- * en raakt geen geld.
+ * Eerst hem zelf vragen welke het is; dat is exact en kost één leesopdracht.
+ * Weet hij het niet te noemen, dan vallen we terug op de sessie-ids van onze
+ * laatste betalingen. Een id dat de terminal niet kent levert STATUS=17 op en
+ * verandert niets, dus dat aflopen kost hooguit een paar seconden en raakt geen
+ * geld.
  */
 export async function clearStuckTransaction(opts: {
   key?: string
   sid?: string
 } = {}): Promise<{ cleared: boolean; sid: string | null; tried: number }> {
-  const sids = opts.sid ? [opts.sid] : recentTerminalSids(8, opts.key)
-  if (sids.length === 0) {
+  const candidates: string[] = []
+
+  if (opts.sid) {
+    candidates.push(opts.sid)
+  } else {
+    try {
+      const state = await askTerminalStatus()
+      if (state.STATUS === "20" && state.SID_ORIGINAL) {
+        // De hele regel meelogboeken: bij een betaling die is blijven hangen
+        // staat hier of de kaart wél belast is (TX_STATUS en RRN), en dat is
+        // wat je aan de balie moet weten voor je iemand laat doorlopen.
+        logger.warn(
+          {
+            sid: state.SID_ORIGINAL,
+            tx_status: state.TX_STATUS,
+            rrn: state.RRN,
+            amount: state.AMOUNT,
+            at: `${state.TX_DATE_LOCAL ?? ""} ${state.TX_TIME_LOCAL ?? ""}`.trim(),
+          },
+          "terminal names the transaction that is holding it up",
+        )
+        candidates.push(state.SID_ORIGINAL)
+      } else if (state.STATUS === "0" || state.STATUS === "100") {
+        logger.info({ key: opts.key }, "terminal says nothing is open after all")
+        return { cleared: true, sid: null, tried: 0 }
+      }
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "terminal did not answer GET_STATUS")
+    }
+
+    for (const sid of recentTerminalSids(8, opts.key)) {
+      if (!candidates.includes(sid)) candidates.push(sid)
+    }
+  }
+
+  if (candidates.length === 0) {
     logger.warn(
       { key: opts.key },
       "terminal reports an open transaction but we have no session id to close it with",
@@ -301,15 +351,15 @@ export async function clearStuckTransaction(opts: {
     return { cleared: false, sid: null, tried: 0 }
   }
 
-  for (const sid of sids) {
+  for (const [i, sid] of candidates.entries()) {
     if (await confirmToTerminal(sid, opts.key ?? "recovery")) {
       logger.info({ key: opts.key, sid }, "stuck terminal transaction cleared")
-      return { cleared: true, sid, tried: sids.indexOf(sid) + 1 }
+      return { cleared: true, sid, tried: i + 1 }
     }
   }
 
-  logger.warn({ key: opts.key, tried: sids.length }, "could not clear the terminal")
-  return { cleared: false, sid: null, tried: sids.length }
+  logger.warn({ key: opts.key, tried: candidates.length }, "could not clear the terminal")
+  return { cleared: false, sid: null, tried: candidates.length }
 }
 
 async function settleFinalFrame(key: string, final: IppFields) {
