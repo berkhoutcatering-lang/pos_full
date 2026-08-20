@@ -1,6 +1,7 @@
 package nl.hopbites.terminal
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,19 +25,39 @@ class TerminalLoop(
     private val _state = MutableStateFlow<TerminalState>(TerminalState.Idle)
     val state: StateFlow<TerminalState> = _state
 
+    /** Of de kassa bereikbaar is. Het bolletje op het rustscherm hangt hieraan. */
+    private val _connected = MutableStateFlow(false)
+    val connected: StateFlow<Boolean> = _connected
+
+    /**
+     * Expliciet op IO. Een Android-scope draait standaard op de hoofdthread, en
+     * daar gooit OkHttp NetworkOnMainThreadException — die verdween in het
+     * niets omdat elke aanroep zijn fouten opvangt, en de lus draaide rondjes
+     * zonder ooit iets te versturen.
+     */
     fun start(scope: CoroutineScope) {
-        scope.launch { pollLoop() }
-        scope.launch { flushLoop() }
-        scope.launch { heartbeatLoop() }
+        scope.launch(Dispatchers.IO) { pollLoop() }
+        scope.launch(Dispatchers.IO) { flushLoop() }
+        scope.launch(Dispatchers.IO) { heartbeatLoop() }
     }
 
     private suspend fun pollLoop() {
         while (true) {
-            val payment = bridge.nextPayment()
-            if (payment == null) {
-                // Niets te doen, of even geen verbinding. Beide: opnieuw.
-                delay(500)
-                continue
+            val payment = when (val result = bridge.nextPayment()) {
+                is PollResult.Work -> {
+                    _connected.value = true
+                    result.payment
+                }
+                PollResult.Idle -> {
+                    _connected.value = true
+                    continue
+                }
+                PollResult.Offline -> {
+                    _connected.value = false
+                    // Niet meteen opnieuw stampen op een kassa die er niet is.
+                    delay(2_000)
+                    continue
+                }
             }
 
             bridge.claim(payment.idempotency_key)
@@ -67,8 +88,9 @@ class TerminalLoop(
 
     private suspend fun heartbeatLoop() {
         while (true) {
-            bridge.heartbeat(batteryPercent = null, printerOk = null, appVersion = appVersion)
-            delay(60_000)
+            val ok = bridge.heartbeat(batteryPercent = null, printerOk = null, appVersion = appVersion)
+            if (ok) _connected.value = true
+            delay(30_000)
         }
     }
 

@@ -11,7 +11,6 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -41,7 +40,7 @@ class TerminalLoopTest {
     @Test
     fun `204 betekent niets te doen, geen fout`() {
         server.enqueue(MockResponse().setResponseCode(204))
-        assertNull(client().nextPayment())
+        assertEquals(PollResult.Idle, client().nextPayment())
     }
 
     @Test
@@ -52,9 +51,10 @@ class TerminalLoopTest {
                     "order_id":"c022931e-e788-46b3-8f0c-bda50f0e09a6","order_label":"Bestelling 12"}"""
             )
         )
-        val payment = client().nextPayment()
-        assertEquals(950, payment?.amount_cents)
-        assertEquals("Bestelling 12", payment?.order_label)
+        val result = client().nextPayment()
+        assertTrue(result is PollResult.Work)
+        assertEquals(950, result.payment.amount_cents)
+        assertEquals("Bestelling 12", result.payment.order_label)
     }
 
     @Test
@@ -65,9 +65,11 @@ class TerminalLoopTest {
     }
 
     @Test
-    fun `een onbereikbare Pi is geen crash maar een lege poll`() {
+    fun `een onbereikbare Pi is geen crash, maar ook geen stilte`() {
         server.shutdown()
-        assertNull(client().nextPayment())
+        // Offline en Idle uit elkaar houden is het verschil tussen een rustige
+        // balie en een kassa die er niet is. De medewerker moet dat zien.
+        assertEquals(PollResult.Offline, client().nextPayment())
     }
 
     @Test

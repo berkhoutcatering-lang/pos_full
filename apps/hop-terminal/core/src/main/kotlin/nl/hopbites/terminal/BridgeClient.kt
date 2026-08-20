@@ -26,14 +26,20 @@ class BridgeClient(
 
     /**
      * Blijft hangen tot er een bedrag klaarstaat of tot de long-poll afloopt.
-     * `null` betekent "niets te doen" — de normale toestand, geen fout.
+     *
+     * "Niets te doen" en "geen verbinding" zijn met opzet twee verschillende
+     * antwoorden: het eerste is de normale toestand aan een rustige balie, het
+     * tweede hoort de medewerker te zien voordat er een klant voor staat.
      */
-    fun nextPayment(): QueuedPayment? {
-        val response = execute(Request.Builder().url("$baseUrl/terminal/next").get()) ?: return null
+    fun nextPayment(): PollResult {
+        val response = execute(Request.Builder().url("$baseUrl/terminal/next").get())
+            ?: return PollResult.Offline
         response.use {
-            if (it.code == 204 || !it.isSuccessful) return null
-            val body = it.body?.string() ?: return null
-            return runCatching { json.decodeFromString<QueuedPayment>(body) }.getOrNull()
+            if (it.code == 204) return PollResult.Idle
+            if (!it.isSuccessful) return PollResult.Offline
+            val body = it.body?.string() ?: return PollResult.Offline
+            val payment = runCatching { json.decodeFromString<QueuedPayment>(body) }.getOrNull()
+            return if (payment == null) PollResult.Offline else PollResult.Work(payment)
         }
     }
 
@@ -56,7 +62,7 @@ class BridgeClient(
         response.use { return it.isSuccessful || it.code == 404 }
     }
 
-    fun heartbeat(batteryPercent: Int?, printerOk: Boolean?, appVersion: String) {
+    fun heartbeat(batteryPercent: Int?, printerOk: Boolean?, appVersion: String): Boolean {
         val body = buildString {
             append("{")
             append(""""battery_percent":${batteryPercent ?: "null"},""")
@@ -64,7 +70,8 @@ class BridgeClient(
             append(""""app_version":"$appVersion"""")
             append("}")
         }
-        post("/terminal/status", body)?.close()
+        val response = post("/terminal/status", body) ?: return false
+        response.use { return it.isSuccessful }
     }
 
     /** Wisselt de 8-tekens koppelcode in voor een token. */
@@ -101,6 +108,15 @@ class BridgeClient(
     private companion object {
         val JSON_MEDIA = "application/json".toMediaType()
     }
+}
+
+/** Wat een long-poll oplevert. */
+sealed interface PollResult {
+    /** De long-poll liep af zonder werk. Normaal. */
+    data object Idle : PollResult
+    data class Work(val payment: QueuedPayment) : PollResult
+    /** De kassa was niet te bereiken. */
+    data object Offline : PollResult
 }
 
 @Serializable

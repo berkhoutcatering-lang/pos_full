@@ -1,59 +1,129 @@
 package nl.hopbites.terminal
 
-import android.app.Activity
-import android.graphics.Color
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.view.WindowManager
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
- * Proefversie: doet niets anders dan opstarten en de naam van de zaak tonen.
+ * De hele app in één activiteit: het scherm volgt de toestand die
+ * [TerminalLoop] uitzendt, en dat is alles wat er te sturen valt.
  *
- * Dat is met opzet. De vraag die dit beantwoordt is niet "werkt de app" maar
- * "komt een door onszelf ondertekende APK überhaupt op de terminal" — en die
- * vraag is het waard om te beantwoorden met een lege app in plaats van met
- * weken werk erin.
- *
- * De echte schermen komen in fase 3; de logica eronder zit al in de
- * core-module en is daar getest.
+ * Waarom zo weinig: elke wijziging in de APK kost een reviewronde bij myPOS van
+ * één tot drie werkdagen. Alles wat kan veranderen — teksten, kleuren, de naam
+ * van de zaak — hoort daarom van de Pi te komen en niet hier te staan.
  */
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
+
+    private lateinit var tokens: SecureTokenStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(GROUND)
-            layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
+        // Aan de balie mag dit scherm nooit uitgaan of vergrendelen.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        tokens = SecureTokenStore(this)
+        val queue = ResultQueue(File(filesDir, "pending-results.jsonl"))
+
+        setContent {
+            var paired by remember { mutableStateOf(tokens.paired) }
+            var pairing by remember { mutableStateOf(false) }
+            var pairError by remember { mutableStateOf<String?>(null) }
+
+            if (!paired) {
+                PairScreen(
+                    bridgeUrl = tokens.bridgeUrl,
+                    busy = pairing,
+                    error = pairError,
+                    onPair = { url, code ->
+                        pairing = true
+                        pairError = null
+                        lifecycleScope.launch {
+                            tokens.bridgeUrl = url
+                            val ok = withContext(Dispatchers.IO) { bridge().pair(code) }
+                            pairing = false
+                            if (ok) {
+                                // Alleen de vlag omzetten; de recompositie start
+                                // de lus. Hem hier óók starten gaf twee lussen
+                                // die om dezelfde betaling vechten.
+                                paired = true
+                            } else {
+                                pairError = "Koppelen mislukt. Klopt de code nog en is de kassa bereikbaar?"
+                            }
+                        }
+                    },
+                )
+                return@setContent
+            }
+
+            val loop = remember { startLoop(queue) }
+            val state by loop.state.collectAsState()
+            val online by loop.connected.collectAsState()
+
+            when (val s = state) {
+                is TerminalState.Idle -> IdleScreen(venue = VENUE, online = online)
+                is TerminalState.Charging -> ChargingScreen(
+                    amountCents = s.payment.amount_cents,
+                    orderLabel = s.payment.order_label,
+                )
+                is TerminalState.Result -> ResultScreen(
+                    amountCents = s.payment.amount_cents,
+                    outcome = s.outcome,
+                )
+            }
         }
+    }
 
-        root.addView(TextView(this).apply {
-            text = getString(R.string.app_name)
-            textSize = 34f
-            setTextColor(INK)
-            gravity = Gravity.CENTER
-        })
+    private fun bridge() = BridgeClient(
+        baseUrl = tokens.bridgeUrl,
+        http = wifiBoundHttpClient(this),
+        tokenStore = tokens,
+    )
 
-        root.addView(TextView(this).apply {
-            text = "proefversie ${BuildConfig.VERSION_NAME}"
-            textSize = 15f
-            setTextColor(MUTED)
-            gravity = Gravity.CENTER
-        })
+    private fun startLoop(queue: ResultQueue): TerminalLoop {
+        val loop = TerminalLoop(
+            bridge = bridge(),
+            // Tot er een demo-debugtoestel is, rekent de stub af. De echte
+            // SDK-aanroep komt op deze ene plek binnen, de rest van de app
+            // merkt er niets van.
+            //
+            // In een debug-build wisselt hij per betaling van uitkomst. Anders
+            // krijg je alleen het gelukkige pad te zien, en juist de twee
+            // andere schermen moeten kloppen: daar staat een klant die denkt
+            // dat hij betaald heeft.
+            gateway = StubPaymentGateway(behaviour = ::nextStubOutcome),
+            queue = queue,
+            appVersion = BuildConfig.VERSION_NAME,
+        )
+        loop.start(lifecycleScope)
+        return loop
+    }
 
-        setContentView(root)
+    private var stubRound = 0
+
+    private fun nextStubOutcome(): StubPaymentGateway.Behaviour {
+        if (!BuildConfig.DEBUG) return StubPaymentGateway.Behaviour.APPROVE
+        val order = listOf(
+            StubPaymentGateway.Behaviour.APPROVE,
+            StubPaymentGateway.Behaviour.DECLINE,
+            StubPaymentGateway.Behaviour.UNRESOLVED,
+        )
+        return order[stubRound++ % order.size]
     }
 
     private companion object {
-        const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-
-        // Dezelfde tokens als de kassa: offwhite grond, antraciet inkt.
-        val GROUND = Color.parseColor("#F4F1E8")
-        val INK = Color.parseColor("#1B201D")
-        val MUTED = Color.parseColor("#697069")
+        // Komt straks van de Pi, samen met de kleuren. Zie het ontwerpplan.
+        const val VENUE = "Hop & Bites"
     }
 }

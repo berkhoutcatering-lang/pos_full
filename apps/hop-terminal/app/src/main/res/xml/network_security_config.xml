@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  De pi-bridge draait TLS met een eigen CA (hopbites-ca.crt van de bootpartitie).
+  Zodra dat certificaat hier als trust anchor bij ligt, praat de app versleuteld
+  met de kassa zonder de certificaatcontrole uit te zetten.
+
+  Voor de emulator staat platte HTTP naar 10.0.2.2 toe — dat is het adres van de
+  ontwikkelmachine, niet iets dat ooit in een truck staat. Elk ander adres moet
+  gewoon TLS spreken.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <!-- <certificates src="@raw/hopbites_ca" /> -->
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
