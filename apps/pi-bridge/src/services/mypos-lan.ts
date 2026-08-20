@@ -153,6 +153,7 @@ export function startTerminalHeartbeat() {
 function classify(
   status: number,
   txStatus?: string,
+  stage?: string,
 ): { normalized: NormalizedStatus; message?: string } {
   if (status === 0 || status === 100) {
     // STATUS covers the protocol exchange; TX_STATUS covers the money.
@@ -185,6 +186,23 @@ function classify(
       return {
         normalized: "failed",
         message: "De vorige betaling staat nog open op de terminal — rond die eerst af.",
+      }
+    case 14: // INTERNAL ERROR
+      // Dubbelzinnig, en dat hangt aan de stap. Bij STAGE=1 heeft de terminal
+      // de betaling niet eens aangenomen. Kwam hij verder, dan is de kaart
+      // mogelijk al langs de bank geweest en mag de kassa niet zeggen dat er
+      // niets is gebeurd.
+      if (stage === "1") {
+        return {
+          normalized: "failed",
+          message:
+            "De terminal kon de betaling niet starten (interne fout) — herstart hem en sla opnieuw aan.",
+        }
+      }
+      return {
+        normalized: "unresolved",
+        message:
+          "De terminal liep vast tijdens de betaling — kijk op de terminal of de kaart belast is voor je opnieuw aanslaat.",
       }
     case 19: // INVALID AMOUNT
       return { normalized: "failed", message: "De terminal accepteert dit bedrag niet." }
@@ -364,7 +382,7 @@ export async function clearStuckTransaction(opts: {
 
 async function settleFinalFrame(key: string, final: IppFields) {
   const status = Number(final.STATUS)
-  const { normalized, message } = classify(status, final.TX_STATUS)
+  const { normalized, message } = classify(status, final.TX_STATUS, final.STAGE)
   const receipt = receiptFields(final)
   lastContactAt = Date.now()
 
