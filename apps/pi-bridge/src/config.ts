@@ -53,6 +53,15 @@ const ConfigSchema = z.object({
   // seen a real Ultra accept; NL is untested and an unsupported value comes
   // back as STATUS=3 (UNSUPPORTED PARAM) instead of a payment.
   MYPOS_TERMINAL_LANG: z.string().length(2).default("EN"),
+  // Ondergrens voor pinnen, in centen.
+  //
+  // Op 2026-08-20 aan de balie vastgesteld: €0,01 wordt door de bank geweigerd
+  // met APPROVAL=58 ("transaction not permitted to terminal"), €1,00 gaat er
+  // gewoon doorheen. Waar de grens precies ligt weten we niet, dus staat hij op
+  // het bedrag dat bewezen werkt. Zonder deze controle krijgt de klant een
+  // bankweigering te zien voor iets wat de kassa van tevoren kan weten.
+  MYPOS_MIN_AMOUNT_CENTS: z.coerce.number().int().nonnegative().default(100),
+
   // Try to put the venue's name on the terminal between payments. Off by
   // default: a myPOS Ultra acknowledges DISPLAY_TEXT and shows nothing, and it
   // is not in myPOS' documented method list. Flip it on if they confirm it.

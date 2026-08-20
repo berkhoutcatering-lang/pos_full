@@ -56,7 +56,7 @@ MYPOS_GATEWAY_URL="https://api-gateway.mypos.com"
 MYPOS_PARTNER_ID="" MYPOS_APPLICATION_ID=""
 MYPOS_INTEGRATION_CLIENT_ID="" MYPOS_INTEGRATION_CLIENT_SECRET=""
 MYPOS_MERCHANT_CLIENT_ID="" MYPOS_MERCHANT_CLIENT_SECRET=""
-MYPOS_TID="" MYPOS_OPERATOR_CODE="1"
+MYPOS_TID="" MYPOS_OPERATOR_CODE="1" MYPOS_MIN_AMOUNT_CENTS="100"
 PRINTER_NETWORK_ADDR="192.168.1.50" PRINTER_TYPE="star"
 POS_HOSTNAME="hopbites" WIFI_SSID="" WIFI_PASS="" WIFI_COUNTRY="NL"
 AP_SSID="" AP_PASS="" AP_BAND="bg" AP_CHANNEL="6" AP_IP="10.42.0.1"
@@ -329,6 +329,9 @@ umask 027
   # compleet zijn. Alleen de keys van de actieve transport worden weggeschreven;
   # de pi-bridge valideert per modus en start dus ook zonder myPOS-config.
   echo "MYPOS_TRANSPORT=${MYPOS_MODE}"
+  if [ "${MYPOS_MODE}" != "off" ]; then
+    echo "MYPOS_MIN_AMOUNT_CENTS=${MYPOS_MIN_AMOUNT_CENTS:-100}"
+  fi
   if [ "${MYPOS_MODE}" = "lan" ]; then
     echo "MYPOS_TERMINAL_HOST=${MYPOS_TERMINAL_HOST}"
     echo "MYPOS_TERMINAL_PORT=${MYPOS_TERMINAL_PORT:-7901}"

@@ -29,6 +29,7 @@ vi.mock("../src/config.js", () => ({
     MYPOS_TRANSPORT: "cloud",
     MYPOS_GATEWAY_URL: "https://api-gateway.mypos.com",
     MYPOS_TID: TID,
+    MYPOS_MIN_AMOUNT_CENTS: 100,
     MYPOS_OPERATOR_CODE: "1",
     MYPOS_PARTNER_ID: "mps-p-test",
     MYPOS_APPLICATION_ID: "mps-app-test",
@@ -273,5 +274,18 @@ describe("myPOS cloud transport — losing the answer", () => {
     expect(res.status).toBe("approved")
     expect(payments.get).not.toHaveBeenCalled()
     expect(auditEvents).toHaveLength(1)
+  })
+})
+
+describe("een bedrag dat de bank toch niet aanneemt", () => {
+  it("biedt geen pin aan onder de ondergrens en raakt de terminal niet", async () => {
+    // Een cent kwam terug van de bank als APPROVAL=58 terwijl een euro gewoon
+    // doorging. De klant hoort dat niet bij het pinpad te ontdekken.
+    const res = await startMyPosTransaction({ ...args, amount_cents: 1 })
+
+    expect(res.status).toBe("failed")
+    expect(res.message).toContain("contant")
+    expect(payments.create).not.toHaveBeenCalled()
+    expect(intent()).toBeUndefined()
   })
 })

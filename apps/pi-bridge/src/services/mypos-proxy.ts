@@ -228,6 +228,19 @@ export async function startMyPosTransaction(
   args: MyPosStartArgs,
 ): Promise<MyPosStartResult> {
   if (config.MYPOS_TRANSPORT === "off") throw new Error("mypos_disabled")
+
+  // Te klein om te pinnen. De terminal neemt het aan, stuurt het naar de bank,
+  // en die weigert — met een code waar aan de balie niemand iets aan heeft.
+  // Dit kan de kassa van tevoren weten, dus dan zegt hij het ook van tevoren.
+  if (args.amount_cents < config.MYPOS_MIN_AMOUNT_CENTS) {
+    const floor = (config.MYPOS_MIN_AMOUNT_CENTS / 100).toFixed(2).replace(".", ",")
+    return {
+      transaction_id: args.idempotency_key,
+      status: "failed",
+      message: `Bedragen onder € ${floor} kan de terminal niet pinnen — reken dit contant af.`,
+    }
+  }
+
   if (config.MYPOS_TRANSPORT === "lan") return startLanTransaction(args)
   if (config.MYPOS_TRANSPORT === "app") return startAppTransaction(args)
 
