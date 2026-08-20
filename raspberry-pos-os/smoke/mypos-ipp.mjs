@@ -16,7 +16,17 @@
 //   node mypos-ipp.mjs --host 192.168.1.135 --method PING
 //   node mypos-ipp.mjs --host 192.168.1.135 --pay 0.01
 //   node mypos-ipp.mjs --host 192.168.1.135 --complete <sid>
+//   node mypos-ipp.mjs --serial /dev/ttyACM0 --method GET_STATUS
 //   node mypos-ipp.mjs --host 192.168.1.135 --display "Hop en Bites|Welkom"
+//
+// --serial praat over USB in plaats van over het netwerk. Zet de terminal dan
+// op POSLink Manager -> Settings -> Change connection type -> USB. Reden om
+// dit te willen: hangt de terminal aan WiFi zonder internet, dan stuurt Android
+// het bankverkeer daarheen in plaats van over de simkaart en mislukt elke
+// transactie. Met USB (of Bluetooth) staat WiFi uit en bestaat dat probleem
+// niet. Draait alleen op Linux — de Pi dus, niet je laptop.
+//
+// Zoek de poort met: ls -l /dev/serial/by-id/
 //
 // --complete sluit een transactie af die bij de terminal is blijven openstaan.
 // Zolang dat niet gebeurt weigert hij elke volgende betaling met STATUS=20,
@@ -35,7 +45,9 @@
 // krijg je hier een weigering of stilte.
 
 import net from "node:net"
+import fs from "node:fs"
 import crypto from "node:crypto"
+import { execFileSync } from "node:child_process"
 
 const args = {}
 for (let i = 2; i < process.argv.length; i++) {
@@ -115,27 +127,98 @@ if (args.pay) {
 
 const hr = () => console.log("-".repeat(66))
 const out = encode(fields)
+const SERIAL = typeof args.serial === "string" ? args.serial : null
+const BAUD = String(args.baud ?? 115200)
 
 hr()
-console.log(`myPOS IPP — ${HOST}:${PORT}   SID ${sid}`)
+console.log(
+  SERIAL
+    ? `myPOS IPP — ${SERIAL} @ ${BAUD}   SID ${sid}`
+    : `myPOS IPP — ${HOST}:${PORT}   SID ${sid}`,
+)
 hr()
 console.log("VERSTUURD (" + out.length + " bytes, prefix " + out.readUInt16BE(0) + "):")
 for (const [k, v] of fields) console.log(`  ${k}=${v}`)
 if (args.pay) console.log("\n  LET OP: dit zet een echte betaling klaar op de terminal.")
 hr()
 
-const sock = net.createConnection({ host: HOST, port: PORT })
-sock.setTimeout(WAIT_MS)
+/**
+ * Eén verbinding, of dat nu een socket of een seriële poort is. Beide leveren
+ * dezelfde vier dingen: schrijven, data ontvangen, stil vallen, en dichtgaan.
+ */
+function openLink() {
+  if (!SERIAL) {
+    const sock = net.createConnection({ host: HOST, port: PORT })
+    sock.setTimeout(WAIT_MS)
+    return {
+      onOpen: (fn) => sock.on("connect", fn),
+      onData: (fn) => sock.on("data", fn),
+      onIdle: (fn) => sock.on("timeout", fn),
+      onError: (fn) => sock.on("error", fn),
+      onClose: (fn) => sock.on("close", fn),
+      write: (b) => sock.write(b),
+      destroy: () => sock.destroy(),
+    }
+  }
+
+  // Node kent geen termios, dus de poort wordt met stty in raw-modus gezet
+  // voordat we hem openen. Zonder raw kauwt de regeldiscipline op bytes die
+  // toevallig op een newline of een Ctrl-teken lijken — en IPP is binair.
+  execFileSync("stty", ["-F", SERIAL, "raw", "-echo", "-echoe", "-echok", BAUD])
+
+  const fd = fs.openSync(SERIAL, "r+")
+  const rs = fs.createReadStream(null, { fd, autoClose: false })
+  const ws = fs.createWriteStream(null, { fd, autoClose: false })
+  let idle = null
+  let closed = false
+  const handlers = { idle: () => {}, close: () => {} }
+  const rearm = () => {
+    clearTimeout(idle)
+    idle = setTimeout(() => handlers.idle(), WAIT_MS)
+  }
+  const shut = () => {
+    if (closed) return
+    closed = true
+    clearTimeout(idle)
+    try { fs.closeSync(fd) } catch {}
+    handlers.close()
+  }
+
+  return {
+    onOpen: (fn) => setImmediate(fn),
+    onData: (fn) => rs.on("data", (c) => { rearm(); fn(c) }),
+    onIdle: (fn) => { handlers.idle = fn },
+    onError: (fn) => { rs.on("error", fn); ws.on("error", fn) },
+    onClose: (fn) => { handlers.close = fn },
+    write: (b) => { ws.write(b); rearm() },
+    destroy: shut,
+  }
+}
+
+let sock
+try {
+  sock = openLink()
+} catch (e) {
+  console.error(`
+Kan ${SERIAL ?? HOST} niet openen: ${e.message}`)
+  if (SERIAL) {
+    console.error(`
+Controleer of de poort bestaat en of je erbij mag:
+  ls -l /dev/serial/by-id/
+  sudo usermod -aG dialout $USER    (daarna opnieuw inloggen)`)
+  }
+  process.exit(1)
+}
 
 let buf = Buffer.alloc(0)
 let frames = 0
 
-sock.on("connect", () => {
+sock.onOpen(() => {
   console.log("verbonden — frame verstuurd, wachten op antwoord…\n")
   sock.write(out)
 })
 
-sock.on("data", (chunk) => {
+sock.onData((chunk) => {
   buf = Buffer.concat([buf, chunk])
   // Zolang er een compleet frame in de buffer zit: eruit halen en tonen.
   while (buf.length >= 2) {
@@ -154,12 +237,12 @@ sock.on("data", (chunk) => {
   }
 })
 
-sock.on("timeout", () => {
+sock.onIdle(() => {
   console.log(`(stil gebleven — ${WAIT_MS / 1000}s zonder nieuw frame)`)
   sock.destroy()
 })
-sock.on("error", (e) => console.error("socketfout:", e.message))
-sock.on("close", () => {
+sock.onError((e) => console.error("verbindingsfout:", e.message))
+sock.onClose(() => {
   hr()
   console.log(frames === 0 ? "Geen enkel frame terug." : `Klaar — ${frames} frame(s) ontvangen.`)
 })
