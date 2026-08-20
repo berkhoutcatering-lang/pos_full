@@ -12,6 +12,7 @@ import {
   type MyPosStartResult,
   type NormalizedStatus,
 } from "./mypos-intents.js"
+import { getReceiptSettings } from "./receipt-settings.js"
 import {
   IPP_STATUS_TEXT,
   formatAmount,
@@ -59,6 +60,59 @@ async function ensureLink(): Promise<void> {
   const ping = runIppMethod({ ...terminal(), method: "PING" })
   await ping.done
   lastContactAt = Date.now()
+}
+
+/**
+ * Between payments the terminal sits on POSLink Manager's own screen, which
+ * shows the cash register's IP address and port. That is fine on a workbench
+ * and wrong at a counter: the customer is looking straight at it. IPP lets the
+ * cash register own that screen, so we put the venue's own name there instead.
+ *
+ * Deliberately fail-soft. DISPLAY_TEXT is documented but we have not verified
+ * every terminal accepts it, and a terminal that refuses to show a logo must
+ * still be able to take money.
+ */
+const IDLE_REFRESH_MS = 4 * 60_000
+
+function idleRows(): string[] {
+  const settings = getReceiptSettings()
+  const rows = [settings.legal_name?.trim(), settings.footer_text?.trim()]
+  return rows.filter((r): r is string => Boolean(r)).slice(0, 5)
+}
+
+export async function showIdleScreen(): Promise<void> {
+  if (config.MYPOS_TRANSPORT !== "lan" || !config.MYPOS_TERMINAL_HOST) return
+  // Never paint over a payment in progress.
+  if (live.size > 0) return
+
+  const rows = idleRows()
+  if (rows.length === 0) return
+
+  try {
+    const session = runIppMethod({
+      ...terminal(),
+      method: "DISPLAY_TEXT",
+      fields: rows.map((text, i) => [`DISPLAY_TEXT_ROW${i + 1}`, text] as [string, string]),
+    })
+    await session.done
+    lastContactAt = Date.now()
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "terminal idle screen not updated")
+  }
+}
+
+/**
+ * Keep the venue's name on the terminal. The refresh doubles as a heartbeat:
+ * it keeps the link warm, so the first payment of a quiet hour does not have
+ * to spend a connection on the handshake.
+ */
+export function startTerminalIdleScreen() {
+  if (config.MYPOS_TRANSPORT !== "lan") return
+  const tick = () => {
+    void showIdleScreen()
+  }
+  setTimeout(tick, 5_000).unref()
+  setInterval(tick, IDLE_REFRESH_MS).unref()
 }
 
 /**
@@ -171,6 +225,9 @@ async function settleFinalFrame(key: string, final: IppFields) {
   )
 
   if (normalized === "approved") await captureOnce(key)
+
+  // Give the customer a moment with the result before we take the screen back.
+  setTimeout(() => void showIdleScreen(), 8_000).unref()
 }
 
 export async function startLanTransaction(

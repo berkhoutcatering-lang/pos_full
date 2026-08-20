@@ -23,6 +23,7 @@ import { receiptSettingsRoutes } from "./routes/receipt-settings.js"
 import { startOutboxFlushWorker } from "./workers/outbox-flush.js"
 import { startPgliteWarmer } from "./workers/pglite-warmer.js"
 import { startReceiptSettingsWarmer } from "./services/receipt-settings.js"
+import { startTerminalIdleScreen } from "./services/mypos-lan.js"
 import { startJwtRotationWatcher } from "./workers/jwt-rotation-watcher.js"
 import { startMdnsAdvertise } from "./services/mdns.js"
 
@@ -89,6 +90,7 @@ Sentry.setupFastifyErrorHandler(app)
 startOutboxFlushWorker()
 startPgliteWarmer()
 startReceiptSettingsWarmer()
+startTerminalIdleScreen()
 startJwtRotationWatcher()
 await startMdnsAdvertise()
 
