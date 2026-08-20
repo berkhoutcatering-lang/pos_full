@@ -20,3 +20,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "hop-terminal"
 include(":core")
+include(":app")
