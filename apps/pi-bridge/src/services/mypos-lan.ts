@@ -232,6 +232,33 @@ export function receiptFields(f: IppFields) {
   }
 }
 
+/**
+ * Bevestig aan de terminal dat we het resultaat hebben.
+ *
+ * Zonder dit blijft de transactie bij hem openstaan en weigert hij de volgende
+ * met STATUS=20 ("vorige transactie niet afgerond"). Dat is precies wat er aan
+ * de balie gebeurde: de eerste betaling lukte, de tweede kwam er niet meer in.
+ *
+ * Fail-soft: lukt de bevestiging niet, dan is de betaling nog steeds gelukt en
+ * heeft de klant zijn bon. Het kost hooguit een herstart van de terminal.
+ */
+async function confirmToTerminal(sid: string, key: string) {
+  try {
+    const session = runIppMethod({
+      ...terminal(),
+      method: "COMPLETE_TX",
+      fields: [["SID_ORIGINAL", sid]],
+    })
+    const final = await session.done
+    logger.info({ key, status: final.STATUS, stage: final.STAGE }, "terminal transaction closed")
+  } catch (err) {
+    logger.warn(
+      { key, err: (err as Error).message },
+      "terminal transaction not confirmed — next payment may be refused with status 20",
+    )
+  }
+}
+
 async function settleFinalFrame(key: string, final: IppFields) {
   const status = Number(final.STATUS)
   const { normalized, message } = classify(status, final.TX_STATUS)
@@ -304,7 +331,13 @@ export async function startLanTransaction(
   // Deliberately not awaited: the kassa polls. Every exit path writes the
   // intent row, so a failure here can never leave the caller without an answer.
   void session.done
-    .then((final) => settleFinalFrame(args.idempotency_key, final))
+    .then(async (final) => {
+      await settleFinalFrame(args.idempotency_key, final)
+      // Alleen bij een transactie die de terminal daadwerkelijk heeft
+      // afgerond; een weigering onderweg (bijvoorbeeld STATUS=20) heeft niets
+      // om te bevestigen.
+      if (final.STAGE === "5") await confirmToTerminal(session.sid, args.idempotency_key)
+    })
     .catch((err) => {
       const reason = (err as Error).message
       // A dropped socket mid-transaction is the ambiguous case: the terminal
