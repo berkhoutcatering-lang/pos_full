@@ -1,7 +1,10 @@
 <title>Privacy — Hop Terminal</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  Bewust geen lettertypen van Google: dat stuurt het IP-adres van elke bezoeker
+  naar een derde partij, en op een privacyverklaring is dat het verkeerde
+  signaal. De systeemletters van de bezoeker doen het werk.
+-->
 
 <style>
   /* Zelfde tokens als de kassa en het ontwerpplan. */
@@ -52,7 +55,7 @@
     margin: 0;
     background: var(--ground);
     color: var(--ink-body);
-    font-family: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: 1.0625rem;
     line-height: 1.62;
     -webkit-font-smoothing: antialiased;
@@ -70,7 +73,7 @@
   header { display: flex; flex-direction: column; gap: 0.85rem; }
 
   .eyebrow {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
     font-size: 0.75rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -93,7 +96,7 @@
   .meta {
     padding-top: 1rem;
     border-top: 2px solid var(--ink);
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
     font-size: 0.8125rem;
     color: var(--ink-muted);
   }
@@ -118,7 +121,7 @@
   a { color: var(--accent); text-underline-offset: 0.2em; }
   a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-  code, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.9em; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; font-size: 0.9em; }
 
   .table-scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); }
   table { border-collapse: collapse; width: 100%; min-width: 32rem; }
@@ -130,7 +133,7 @@
     font-size: 0.9375rem;
   }
   th {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
