@@ -154,13 +154,19 @@ function classify(
   status: number,
   txStatus?: string,
   stage?: string,
+  approval?: string,
 ): { normalized: NormalizedStatus; message?: string } {
+  // Wat de bank ervan vond, als hij dat zei. "58" betekent niets aan de balie,
+  // maar het is het eerste wat myPOS vraagt als je belt, en zonder die code is
+  // een weigering niet te onderscheiden van een storing.
+  const bank = approval && approval !== "00" ? ` (bankcode ${approval})` : ""
+
   if (status === 0 || status === 100) {
     // STATUS covers the protocol exchange; TX_STATUS covers the money.
     if (txStatus !== undefined && txStatus !== "0") {
       return {
         normalized: "declined",
-        message: "De betaling is niet gelukt — probeer opnieuw of reken contant af.",
+        message: `De bank weigerde de betaling${bank} — probeer een andere kaart of reken contant af.`,
       }
     }
     return { normalized: "approved" }
@@ -173,7 +179,7 @@ function classify(
     case 10: // MAX PIN COUNT EXCEEDED
       return {
         normalized: "declined",
-        message: "De kaart is geweigerd — probeer een andere kaart of reken contant af.",
+        message: `De kaart is geweigerd${bank} — probeer een andere kaart of reken contant af.`,
       }
     case 13: // USER CANCEL
       return { normalized: "declined", message: "Betaling geannuleerd op de terminal." }
@@ -382,7 +388,7 @@ export async function clearStuckTransaction(opts: {
 
 async function settleFinalFrame(key: string, final: IppFields) {
   const status = Number(final.STATUS)
-  const { normalized, message } = classify(status, final.TX_STATUS, final.STAGE)
+  const { normalized, message } = classify(status, final.TX_STATUS, final.STAGE, final.APPROVAL)
   const receipt = receiptFields(final)
   lastContactAt = Date.now()
 
@@ -401,7 +407,18 @@ async function settleFinalFrame(key: string, final: IppFields) {
   })
 
   logger.info(
-    { key, status, normalized, rrn: receipt.rrn, auth_code: receipt.auth_code },
+    {
+      key,
+      status,
+      normalized,
+      rrn: receipt.rrn,
+      auth_code: receipt.auth_code,
+      // Het antwoord van de bank. 00 is goedgekeurd; alles daarbuiten is de
+      // reden waarom niet, en die staat nergens anders.
+      approval: receipt.approval,
+      card: receipt.card_scheme,
+      pan: receipt.pan_masked,
+    },
     "myPOS LAN payment settled",
   )
 
