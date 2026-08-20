@@ -1,8 +1,10 @@
+import net from "node:net"
 import { describe, expect, it } from "vitest"
 import {
   encodeFrame,
   formatAmount,
   parseFields,
+  runIppMethod,
   takeFrames,
 } from "../src/services/mypos-ipp.js"
 
@@ -104,5 +106,38 @@ describe("amount formatting", () => {
     expect(formatAmount(1)).toBe("0.01")
     expect(formatAmount(950)).toBe("9.50")
     expect(formatAmount(123456)).toBe("1234.56")
+  })
+})
+
+describe("een weigering onderweg", () => {
+  it("beëindigt de sessie in plaats van te wachten op een stage 5 die nooit komt", async () => {
+    // De terminal antwoordde op een echte betaling met stage 1, status 20
+    // ("vorige transactie niet afgerond") en zweeg daarna. De bridge liep toen
+    // in een time-out van tien seconden en meldde "onbekend", terwijl er een
+    // duidelijk antwoord lag.
+    const server = net.createServer((socket) => {
+      socket.on("data", () => {
+        socket.write(
+          encodeFrame([
+            ["PROTOCOL", "IPP"],
+            ["METHOD", "PURCHASE"],
+            ["STAGE", "1"],
+            ["STATUS", "20"],
+          ]),
+        )
+        // En dan niets meer, precies zoals het echte toestel.
+      })
+    })
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
+    const port = (server.address() as net.AddressInfo).port
+
+    try {
+      const session = runIppMethod({ host: "127.0.0.1", port, method: "PURCHASE" })
+      const final = await session.done
+      expect(final.STATUS).toBe("20")
+      expect(final.STAGE).toBe("1")
+    } finally {
+      server.close()
+    }
   })
 })

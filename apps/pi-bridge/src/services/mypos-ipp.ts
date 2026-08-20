@@ -161,6 +161,18 @@ export function runIppMethod(req: IppRequest): IppSession {
           finish(() => resolve(f))
           return
         }
+        // Een weigering onderweg is het einde: de terminal stuurt daarna geen
+        // STAGE=5 meer. Blijven wachten leverde een time-out op terwijl hij
+        // allang had gezegd wat er mis was — bijvoorbeeld STATUS=20, "vorige
+        // transactie niet afgerond".
+        if (f.STATUS !== undefined && f.STATUS !== "0" && f.STATUS !== "100") {
+          logger.warn(
+            { sid, stage: f.STAGE, status: f.STATUS, method: f.METHOD },
+            "ipp refused mid-flow",
+          )
+          finish(() => resolve(f))
+          return
+        }
         // The terminal tells us how long the next stage may take; a card in a
         // customer's hand is worth waiting for, a silent socket is not.
         const secs = Number(f.TIMEOUT)
