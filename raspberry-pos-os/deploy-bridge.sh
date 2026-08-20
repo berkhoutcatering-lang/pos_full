@@ -22,8 +22,17 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BRIDGE_DIR="$(cd "${SCRIPT_DIR}/../apps/pi-bridge" && pwd)"
 
-echo "== compileren =="
 cd "${BRIDGE_DIR}"
+
+# Draait dit in een shell die de Node-toolchain kent? Vanuit cmd.exe kan `bash`
+# de WSL-shell zijn, en daar staat je Windows-Node niet in de PATH.
+if ! command -v npx >/dev/null 2>&1; then
+  echo "npx niet gevonden in deze shell." >&2
+  echo "Draai dit script vanuit Git Bash, niet vanuit cmd.exe of WSL." >&2
+  exit 1
+fi
+
+echo "== compileren =="
 npx tsc
 
 if [ ! -f dist/index.js ]; then
@@ -33,9 +42,12 @@ fi
 
 # Dependencies vergelijken: de Pi heeft node_modules uit het image, dus een
 # nieuwe dependency landt hier niet en de bridge crasht bij het opstarten.
+# Bewust met sed en niet met node: dit moet ook werken in een kale shell.
+deps_block() { sed -n '/"dependencies"/,/}/p' "$1" | tr -d ' 	'; }
+
 echo "== dependencies vergelijken =="
-LOCAL_DEPS=$(node -e "const p=require('./package.json');console.log(JSON.stringify(p.dependencies))")
-REMOTE_DEPS=$(ssh "${TARGET}" "node -e \"const p=require('/opt/pi-bridge/package.json');console.log(JSON.stringify(p.dependencies))\"" 2>/dev/null || echo "")
+LOCAL_DEPS=$(deps_block package.json)
+REMOTE_DEPS=$(ssh "${TARGET}" "sed -n '/\"dependencies\"/,/}/p' /opt/pi-bridge/package.json | tr -d ' 	'" 2>/dev/null || echo "")
 if [ -n "${REMOTE_DEPS}" ] && [ "${LOCAL_DEPS}" != "${REMOTE_DEPS}" ]; then
   echo
   echo "LET OP: package.json verschilt van wat er op de Pi staat."
