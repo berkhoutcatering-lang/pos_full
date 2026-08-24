@@ -40,12 +40,84 @@ nieuwer** (oudere images syncen geen orders naar de cloud — niet gebruiken).
 - Pi aan → AP komt vanzelf op → tablets verbinden automatisch.
 - Alles werkt **zonder internet**: bestellen, keuken, CFD, bonnen, lade,
   offline inloggen, menu-items toevoegen (syncen later), afroepnummers.
-- PIN vereist dat de **myPOS-terminal zelf** verbinding heeft (eigen simkaart
-  of het AP — de Pi-bridge praat met de myPOS-cloud, dus de Pi heeft daarvoor
-  óók een uplink nodig: telefoon-tethering op de ethernet/usb-poort).
-  **Zonder uplink: cash-only — de kassa zegt het er eerlijk bij.**
+- PIN werkt **zonder internet op de Pi**, mits de terminal aan de USB van het
+  kassascherm hangt en zijn eigen WiFi uit staat — zie het hoofdstuk hieronder.
+  Gaat er iets mis met de terminal, dan zegt de kassa het er eerlijk bij en kun
+  je contant door.
 - Bij rare problemen: Pi herstarten mag altijd — orders staan veilig in de
   outbox op de SD-kaart en niets gaat verloren.
+
+## PIN op het eigen netwerk — de terminal aan het kassascherm
+
+De opstelling waar geen router en geen internet aan te pas komt.
+
+```
+  terminal --USB--> kassascherm --WiFi--> Pi (access point)
+     |
+     +-- simkaart --> de bank
+```
+
+**Waarom via een kabel en niet via het AP.** Hangt de terminal aan een
+WiFi-netwerk zonder internet, dan stuurt Android het bankverkeer daarheen in
+plaats van over de simkaart en mislukt élke transactie — je ziet dan
+`APPROVAL=91` ("issuer or switch inoperative") op de terminal. Aan een kabel
+staat zijn WiFi uit en is de sim de enige uitweg. Dat de Pi vervolgens over het
+AP met het kassascherm praat is ons eigen verkeer en raakt de bank niet.
+
+**De Pi heeft dus geen uplink nodig voor pinnen.** Wat er zonder internet niet
+gebeurt is de sync naar Supabase; die wacht in de outbox tot je weer thuis bent.
+
+### Eenmalig klaarzetten
+
+- [ ] **Terminal**: POSLink Manager → Settings → Change connection type → **USB**.
+      Daarna WiFi op de terminal **helemaal uit** — vergeet dit niet, dit is de
+      hele reden voor deze opstelling.
+- [ ] **Datakabel** van de terminal naar het kassascherm. Een brandend
+      laadlampje bewijst niet dat het er een is.
+- [ ] **Kassascherm** op het AP (`AP_SSID` uit pos.env). Windows vraagt bij een
+      nieuw netwerk om openbaar of privé: kies **privé**, anders blokkeert de
+      firewall poort 7901 en lijkt de terminal stuk.
+- [ ] **Vast adres** voor het kassascherm op dat netwerk. De DHCP-pool van de Pi
+      begint bij `.10`, dus neem iets daaronder: IP `10.42.0.5`, gateway en DNS
+      `10.42.0.1`, masker `255.255.255.0`. Zonder vast adres wijst
+      `MYPOS_TERMINAL_HOST` na een herstart naar niets.
+- [ ] **Doorgeefluik installeren** op het kassascherm (eenmalig, met internet):
+      `cd tools/usb-relay && npm install`
+- [ ] In `pos-setup/pos.env` op de Pi:
+      ```
+      MYPOS_TRANSPORT=lan
+      MYPOS_TERMINAL_HOST=10.42.0.5
+      MYPOS_TERMINAL_PORT=7901
+      ```
+
+### Op de dag, in deze volgorde
+
+1. Pi aan. Het AP komt vanzelf op.
+2. Kassascherm verbindt met het AP; controleer dat hij `10.42.0.5` heeft.
+3. Terminal met de kabel aan het kassascherm, WiFi op de terminal uit.
+4. Doorgeefluik starten en **open laten staan**:
+   ```
+   node tools/usb-relay/relay.mjs --allow 10.42.0.1
+   ```
+   Hij zoekt de terminal zelf op en drukt af wat er in pos.env hoort.
+5. Toets vanaf de Pi of er een frame doorheen komt (leest alleen):
+   ```
+   ssh hopbites@10.42.0.1 "node mypos-ipp.mjs --host 10.42.0.5 --method GET_STATUS"
+   ```
+   `STAGE=5 STATUS=0` = klaar. Staat er `STATUS=20`, dan hangt er nog een
+   transactie open; de bridge maakt die bij de eerste betaling zelf los.
+6. Eén echte betaling van **€1,00**. Onder een euro weigert de bridge zelf en
+   stelt contant voor — dat is geen storing maar een ondergrens van de bank.
+
+### Als pinnen het niet doet
+
+| Wat je ziet | Waar het bijna altijd aan ligt |
+|---|---|
+| `npm run list` toont geen terminal | Kabel (laad-only), of POSLink Manager staat nog op WiFi |
+| Pi kan niet verbinden | Windows-firewall op openbaar, of het kassascherm heeft een ander adres |
+| `APPROVAL=91` op de terminal | De WiFi van de terminal staat nog aan |
+| Kassa zegt "vorige betaling staat nog open" | De bridge ruimt dat zelf op; herhalen. Lukt het niet: terminal herstarten |
+| Kassascherm reageert niet meer | Slaapstand. Zet die uit in Energiebeheer terwijl hij aan de stroom hangt |
 
 ## Na afloop
 
