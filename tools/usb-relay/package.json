@@ -1,0 +1,14 @@
+{
+  "name": "hopbites-usb-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Zet de myPOS-terminal aan de USB van het kassascherm op het netwerk, zodat de pi-bridge erbij kan.",
+  "scripts": {
+    "start": "node relay.mjs",
+    "list": "node relay.mjs --list"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  }
+}
