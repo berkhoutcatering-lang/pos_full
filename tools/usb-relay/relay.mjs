@@ -111,10 +111,17 @@ async function main() {
   let busy = false
 
   server.on("connection", (socket) => {
-    const from = socket.remoteAddress?.replace(/^::ffff:/, "") ?? "?"
+    const clean = (a) => a?.replace(/^::ffff:/, "") ?? "?"
+    const from = clean(socket.remoteAddress)
+    // Op welk van onze eigen adressen hij binnenkwam. Een Pi met zowel een
+    // kabel als een eigen access point heeft twéé adressen, en welke hij als
+    // afzender kiest is niet aan ons — zonder deze regel lijkt een geweigerde
+    // verbinding op een terminal die stuk is.
+    const via = clean(socket.localAddress)
 
     if (allow.length > 0 && !allow.includes(from)) {
-      log(`geweigerd: ${from} staat niet in --allow`)
+      log(`geweigerd: ${from} (binnengekomen op ${via}) staat niet in --allow`)
+      log(`           hoort dit erbij? start opnieuw met --allow ${from}`)
       socket.destroy()
       return
     }
@@ -125,7 +132,7 @@ async function main() {
     }
 
     busy = true
-    log(`verbonden: ${from}`)
+    log(`verbonden: ${from} (op ${via})`)
 
     const port = new SerialPort({ path, baudRate: BAUD, autoOpen: false })
     let bytesUp = 0

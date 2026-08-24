@@ -52,6 +52,16 @@ MYPOS_TERMINAL_PORT=7901
 iedereen op het netwerk de terminal aansturen — op een festivalterrein is dat
 geen theoretisch bezwaar.
 
+**Geef álle adressen van de Pi op.** Zolang er een netwerkkabel in zit heeft hij
+er twee: die van de kabel én die van zijn eigen access point. Welke hij als
+afzender kiest is niet aan ons, en een geweigerde verbinding ziet er in de kassa
+uit als een terminal die niet bereikbaar is. Het venster zegt bij een weigering
+welk adres het was.
+
+```
+node relay.mjs --allow 10.42.0.1 --allow 192.168.1.88
+```
+
 Andere vlaggen: `--serial COM3` als de automatische keuze ernaast zit,
 `--tcp-port` en `--baud` om af te wijken van 7901 en 115200.
 
