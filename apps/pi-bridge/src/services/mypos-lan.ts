@@ -22,6 +22,7 @@ import {
   type IppSession,
 } from "./mypos-ipp.js"
 import type { IppTarget } from "./ipp-link.js"
+import { browserAttached } from "./mypos-web-link.js"
 
 // PIN over the LAN: the Pi drives the myPOS Ultra directly over TCP with IPP,
 // and the terminal authorises the card over its own SIM. Nothing in this path
@@ -43,18 +44,26 @@ const live = new Map<string, IppSession>()
  * in dit bestand geldt voor allebei. Het verschil zit alleen in `target()`.
  */
 export function ippDriven(): boolean {
-  return config.MYPOS_TRANSPORT === "lan" || config.MYPOS_TRANSPORT === "usb"
+  return (
+    config.MYPOS_TRANSPORT === "lan" ||
+    config.MYPOS_TRANSPORT === "usb" ||
+    config.MYPOS_TRANSPORT === "browser"
+  )
 }
 
 function target(): IppTarget {
+  if (config.MYPOS_TRANSPORT === "browser") {
+    return { browser: true, baud: config.MYPOS_TERMINAL_BAUD }
+  }
   if (config.MYPOS_TRANSPORT === "usb") {
     return { serial: config.MYPOS_TERMINAL_SERIAL!, baud: config.MYPOS_TERMINAL_BAUD }
   }
   return { host: config.MYPOS_TERMINAL_HOST!, port: config.MYPOS_TERMINAL_PORT }
 }
 
-/** Bereikbaar? Zonder adres of poort valt er niets te sturen. */
+/** Bereikbaar? Zonder adres, poort of gekoppeld scherm valt er niets te sturen. */
 function terminalConfigured(): boolean {
+  if (config.MYPOS_TRANSPORT === "browser") return browserAttached()
   return config.MYPOS_TRANSPORT === "usb"
     ? Boolean(config.MYPOS_TERMINAL_SERIAL)
     : Boolean(config.MYPOS_TERMINAL_HOST)
@@ -548,7 +557,10 @@ export async function startLanTransaction(
     return {
       transaction_id: args.idempotency_key,
       status: "failed",
-      message: "De terminal is niet bereikbaar — controleer of hij op het kassanetwerk zit.",
+      message:
+        config.MYPOS_TRANSPORT === "browser"
+          ? "De terminal is niet gekoppeld — klik op dit scherm op 'Terminal koppelen'."
+          : "De terminal is niet bereikbaar — controleer of hij op het kassanetwerk zit.",
     }
   }
 

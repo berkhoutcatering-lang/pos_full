@@ -48,7 +48,11 @@ const ConfigSchema = z.object({
   //          internet, dan stuurt Android het bankverkeer daarheen in plaats
   //          van over de simkaart en mislukt elke transactie. Met USB staat
   //          WiFi uit en is de sim de enige uitweg.
-  MYPOS_TRANSPORT: z.enum(["off", "lan", "usb", "app", "cloud"]).default("off"),
+  //   browser Zelfde kabel, maar hij hangt aan het kassascherm in plaats van
+  //          aan de Pi. Chrome daar houdt de poort vast (WebSerial) en haalt
+  //          de bytes op. Scheelt een los programma, een firewallregel en een
+  //          vast IP voor dat scherm.
+  MYPOS_TRANSPORT: z.enum(["off", "lan", "usb", "browser", "app", "cloud"]).default("off"),
 
   // LAN route: where the terminal listens. Port is configurable in POSLink
   // Manager (Settings -> Edit port) and is not the same on every device.
@@ -151,6 +155,9 @@ const ConfigSchema = z.object({
       if (!c.MYPOS_TERMINAL_SERIAL) missing("MYPOS_TERMINAL_SERIAL")
       return
     }
+
+    // De browser-route heeft geen adres nodig: het kassascherm meldt zich zelf.
+    if (c.MYPOS_TRANSPORT === "browser") return
 
     if (c.MYPOS_TRANSPORT !== "cloud") return
 

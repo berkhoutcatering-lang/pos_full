@@ -3,15 +3,25 @@ import fs from "node:fs"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { logger } from "../utils/logger.js"
+import {
+  beginSession,
+  closeSession,
+  openSession,
+  writeToSession,
+} from "./mypos-web-link.js"
 
 /**
- * De pijp onder IPP: een TCP-socket of een seriële poort.
+ * De pijp onder IPP: een TCP-socket, een seriële poort, of de browser van het
+ * kassascherm.
  *
- * Waarom er twee zijn: hangt de terminal aan WiFi zonder internet, dan stuurt
+ * Waarom er meer dan één is: hangt de terminal aan WiFi zonder internet, dan stuurt
  * Android het bankverkeer daarheen in plaats van over de simkaart en mislukt
  * elke transactie. Aan een USB-kabel staat WiFi uit, is de sim de enige uitweg,
  * en bestaat dat probleem niet. Bluetooth lost hetzelfde op en komt in Linux
  * ook binnen als seriële poort, dus dat is dezelfde code met een ander pad.
+ *
+ * En hangt die kabel niet aan de Pi maar aan het kassascherm, dan houdt de
+ * browser daar de poort vast (WebSerial) en halen we de bytes daar op.
  *
  * De protocollaag erboven merkt van dit onderscheid niets: allebei leveren ze
  * bytes aan, nemen ze bytes aan, en vallen ze stil.
@@ -44,14 +54,26 @@ export interface SerialTarget {
   baud: number
 }
 
-export type IppTarget = TcpTarget | SerialTarget
+/** De kabel hangt aan het kassascherm; de browser daar geeft de bytes door. */
+export interface BrowserTarget {
+  browser: true
+  baud: number
+}
+
+export type IppTarget = TcpTarget | SerialTarget | BrowserTarget
 
 export function isSerial(target: IppTarget): target is SerialTarget {
   return "serial" in target
 }
 
+export function isBrowser(target: IppTarget): target is BrowserTarget {
+  return "browser" in target
+}
+
 export function describeTarget(target: IppTarget): string {
-  return isSerial(target) ? target.serial : `${target.host}:${target.port}`
+  if (isSerial(target)) return target.serial
+  if (isBrowser(target)) return "kassascherm"
+  return `${target.host}:${target.port}`
 }
 
 function tcpLink(target: TcpTarget): IppLink {
@@ -214,8 +236,102 @@ function serialLink(target: SerialTarget): IppLink {
   }
 }
 
+/**
+ * De browser als kabel.
+ *
+ * Anders dan bij de andere twee bellen wij hier niet uit: de kassapagina heeft
+ * zich gemeld en haalt zijn werk op. Is er geen pagina gekoppeld, dan is dat
+ * meteen een fout — wachten op een browser die er niet is levert alleen een
+ * klant op die naar een leeg scherm kijkt.
+ */
+function browserLink(target: BrowserTarget): IppLink {
+  const handlers = {
+    open: () => {},
+    data: (_c: Buffer) => {},
+    idle: () => {},
+    error: (_e: Error) => {},
+    close: () => {},
+  }
+
+  let sessionId: string | null = null
+  let idleTimer: NodeJS.Timeout | null = null
+  let idleMs = 0
+  let closed = false
+
+  const rearm = () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = null
+    if (idleMs > 0 && !closed) {
+      idleTimer = setTimeout(() => handlers.idle(), idleMs)
+      idleTimer.unref()
+    }
+  }
+
+  const shut = () => {
+    if (closed) return
+    closed = true
+    if (idleTimer) clearTimeout(idleTimer)
+    if (sessionId) closeSession(sessionId)
+    sessionId = null
+    handlers.close()
+  }
+
+  // Niet meteen: de aanroeper moet eerst zijn handlers kunnen zetten.
+  setImmediate(() => {
+    if (closed) return
+    const id = openSession({
+      onData: (chunk) => {
+        rearm()
+        handlers.data(chunk)
+      },
+      onError: (err) => {
+        if (!closed) handlers.error(err)
+      },
+    })
+    if (!id) {
+      handlers.error(new Error("geen kassascherm met de terminal gekoppeld"))
+      shut()
+      return
+    }
+    sessionId = id
+    beginSession(id, target.baud)
+    handlers.open()
+    rearm()
+  })
+
+  return {
+    onOpen: (fn) => {
+      handlers.open = fn
+    },
+    onData: (fn) => {
+      handlers.data = fn
+    },
+    onIdle: (fn) => {
+      handlers.idle = fn
+    },
+    onError: (fn) => {
+      handlers.error = fn
+    },
+    onClose: (fn) => {
+      handlers.close = fn
+    },
+    write: (data) => {
+      if (!sessionId || closed) return
+      writeToSession(sessionId, data)
+      rearm()
+    },
+    setIdleTimeout: (ms) => {
+      idleMs = ms
+      rearm()
+    },
+    destroy: shut,
+  }
+}
+
 export function openLink(target: IppTarget): IppLink {
-  return isSerial(target) ? serialLink(target) : tcpLink(target)
+  if (isSerial(target)) return serialLink(target)
+  if (isBrowser(target)) return browserLink(target)
+  return tcpLink(target)
 }
 
 /** Alleen voor tests: wacht tot de seriële wachtrij leeg is. */

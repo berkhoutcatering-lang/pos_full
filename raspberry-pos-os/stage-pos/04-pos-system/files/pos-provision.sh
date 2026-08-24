@@ -318,11 +318,19 @@ case "${MYPOS_TRANSPORT}" in
       MYPOS_MODE="usb"
     fi
     ;;
+  browser)
+    # Geen adres nodig: het kassascherm meldt zich zelf bij de bridge en houdt
+    # de kabel vast. Wel een voorwaarde die je niet kunt controleren vanaf hier:
+    # dat scherm moet Chrome op een desktop draaien, want alleen dáár mag een
+    # pagina een seriële poort openen.
+    MYPOS_OK=1
+    MYPOS_MODE="browser"
+    ;;
   off|"")
     WARNINGS+=("myPOS staat uit (MYPOS_TRANSPORT=off) — PIN-betalingen zijn uitgeschakeld.")
     ;;
   *)
-    WARNINGS+=("MYPOS_TRANSPORT='${MYPOS_TRANSPORT}' is ongeldig (kies off, lan, usb of cloud) — PIN uitgeschakeld.")
+    WARNINGS+=("MYPOS_TRANSPORT='${MYPOS_TRANSPORT}' is ongeldig (kies off, lan, usb, browser of cloud) — PIN uitgeschakeld.")
     ;;
 esac
 
@@ -564,7 +572,9 @@ FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/n
   fi
   echo "IP-adressen:  $(hostname -I 2>/dev/null)"
   echo "Internet:     ${UPLINK_LINE}"
-  if [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "usb" ]; then
+  if [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "browser" ]; then
+    echo "myPOS PIN:    geconfigureerd (browser) — het kassascherm houdt de kabel vast"
+  elif [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "usb" ]; then
     echo "myPOS PIN:    geconfigureerd (usb) — terminal op ${MYPOS_TERMINAL_SERIAL}$([ -e "${MYPOS_TERMINAL_SERIAL}" ] || echo ' (NIET AANWEZIG)')"
   elif [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "lan" ]; then
     echo "myPOS PIN:    geconfigureerd (lan) — terminal op ${MYPOS_TERMINAL_HOST}:${MYPOS_TERMINAL_PORT:-7901}"

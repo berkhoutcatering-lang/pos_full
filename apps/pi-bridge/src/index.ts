@@ -12,6 +12,7 @@ import { healthRoute } from "./routes/_health.js"
 import { pairRoutes } from "./routes/pair.js"
 import { myposRoutes } from "./routes/mypos.js"
 import { terminalRoutes } from "./routes/terminal.js"
+import { terminalLinkRoutes } from "./routes/terminal-link.js"
 import { orderRoutes } from "./routes/orders.js"
 import { printRoutes } from "./routes/print.js"
 import { cacheRoutes } from "./routes/cache.js"
@@ -76,6 +77,7 @@ await app.register(healthRoute)
 await app.register(pairRoutes)
 await app.register(myposRoutes)
 await app.register(terminalRoutes)
+await app.register(terminalLinkRoutes)
 await app.register(orderRoutes)
 await app.register(printRoutes)
 await app.register(cacheRoutes)

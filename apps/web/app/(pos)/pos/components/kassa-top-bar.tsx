@@ -4,6 +4,7 @@ import Link from "next/link"
 import { LayoutGrid, ShoppingBag } from "lucide-react"
 import { Logo } from "@/components/ui/logo"
 import { ConnectionChip } from "@/components/connection-chip"
+import { TerminalChip } from "@/components/terminal-chip"
 
 export function KassaTopBar() {
   return (
@@ -24,6 +25,7 @@ export function KassaTopBar() {
       </span>
 
       <div className="flex items-center gap-4">
+        <TerminalChip />
         <ConnectionChip />
         <div className="text-right">
           <div className="hb-tabular text-[16px] font-bold leading-none text-offwhite">
