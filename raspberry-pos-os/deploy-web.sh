@@ -106,6 +106,13 @@ tar -czf - -C "${STAGE}" apps | ssh "${TARGET}" "cat > /tmp/pos-web.tgz"
 echo "== installeren en herstarten =="
 ssh "${TARGET}" bash -s <<'REMOTE'
 set -euo pipefail
+
+# Eerst een reservekopie. Gaat de nieuwe versie niet starten, dan is de kassa
+# anders wég tot er een image gebouwd is — en dat is niet iets wat je op een
+# zaterdagochtend wilt ontdekken.
+sudo rm -rf /opt/pos-web.vorige
+sudo cp -a /opt/pos-web/apps/web /opt/pos-web.vorige
+
 # Alles uit .next weg behalve node_modules — die hoort bij de architectuur van
 # de Pi en komt niet uit deze bundel.
 sudo find /opt/pos-web/apps/web/.next -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} +
@@ -129,6 +136,9 @@ echo "== gezondheid =="
 ssh "${TARGET}" "curl -s --max-time 5 http://127.0.0.1:3000/api/ping || echo '(geen antwoord van de web-app)'"
 echo
 echo "Klaar. Bij een crash: ssh ${TARGET} 'journalctl -u pos-web -n 40 --no-pager'"
+echo
+echo "Terug naar de vorige versie:"
+echo "  ssh ${TARGET} 'sudo rm -rf /opt/pos-web/apps/web && sudo cp -a /opt/pos-web.vorige /opt/pos-web/apps/web && sudo systemctl restart pos-web'"
 echo
 echo "Let op: node_modules op de Pi zijn NIET bijgewerkt. Veranderde er iets in"
 echo "apps/web/package.json, bouw dan een nieuwe image."
