@@ -100,6 +100,7 @@ PRINTER_NETWORK_ADDR="192.168.1.50" PRINTER_TYPE="star"
 POS_HOSTNAME="hopbites" WIFI_SSID="" WIFI_PASS="" WIFI_COUNTRY="NL"
 AP_SSID="" AP_PASS="" AP_BAND="bg" AP_CHANNEL="6" AP_IP="10.42.0.1"
 MYPOS_TERMINAL_HOST="" MYPOS_TERMINAL_PORT="7901"
+MYPOS_TERMINAL_SERIAL="" MYPOS_TERMINAL_BAUD="115200"
 KIOSK_URL="" ALLOWED_ORIGINS="" MDNS_INTERFACE="" SENTRY_DSN=""
 ENABLE_RPI_CONNECT="0"
 set -a
@@ -303,11 +304,25 @@ case "${MYPOS_TRANSPORT}" in
       MYPOS_MODE="lan"
     fi
     ;;
+  usb)
+    if [ -z "${MYPOS_TERMINAL_SERIAL}" ]; then
+      WARNINGS+=("MYPOS_TRANSPORT=usb maar MYPOS_TERMINAL_SERIAL ontbreekt — PIN uitgeschakeld. Zoek het pad met: ls -l /dev/serial/by-id/")
+    elif [ ! -e "${MYPOS_TERMINAL_SERIAL}" ]; then
+      # Wel ingevuld, maar er zit niets. Meestal: kabel los, terminal uit, of
+      # POSLink Manager staat nog op WiFi in plaats van USB.
+      WARNINGS+=("MYPOS_TERMINAL_SERIAL=${MYPOS_TERMINAL_SERIAL} bestaat niet — zit de kabel erin en staat de terminal op USB? PIN werkt pas als hij er is.")
+      MYPOS_OK=1
+      MYPOS_MODE="usb"
+    else
+      MYPOS_OK=1
+      MYPOS_MODE="usb"
+    fi
+    ;;
   off|"")
     WARNINGS+=("myPOS staat uit (MYPOS_TRANSPORT=off) — PIN-betalingen zijn uitgeschakeld.")
     ;;
   *)
-    WARNINGS+=("MYPOS_TRANSPORT='${MYPOS_TRANSPORT}' is ongeldig (kies off, lan of cloud) — PIN uitgeschakeld.")
+    WARNINGS+=("MYPOS_TRANSPORT='${MYPOS_TRANSPORT}' is ongeldig (kies off, lan, usb of cloud) — PIN uitgeschakeld.")
     ;;
 esac
 
@@ -386,6 +401,11 @@ umask 027
   if [ "${MYPOS_MODE}" = "lan" ]; then
     echo "MYPOS_TERMINAL_HOST=${MYPOS_TERMINAL_HOST}"
     echo "MYPOS_TERMINAL_PORT=${MYPOS_TERMINAL_PORT:-7901}"
+    echo "MYPOS_OPERATOR_CODE=${MYPOS_OPERATOR_CODE}"
+  fi
+  if [ "${MYPOS_MODE}" = "usb" ]; then
+    echo "MYPOS_TERMINAL_SERIAL=${MYPOS_TERMINAL_SERIAL}"
+    echo "MYPOS_TERMINAL_BAUD=${MYPOS_TERMINAL_BAUD:-115200}"
     echo "MYPOS_OPERATOR_CODE=${MYPOS_OPERATOR_CODE}"
   fi
   if [ "${MYPOS_MODE}" = "cloud" ]; then
@@ -544,7 +564,9 @@ FP=$(openssl x509 -in "${TLS_DIR}/cert.pem" -noout -fingerprint -sha256 2>/dev/n
   fi
   echo "IP-adressen:  $(hostname -I 2>/dev/null)"
   echo "Internet:     ${UPLINK_LINE}"
-  if [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "lan" ]; then
+  if [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "usb" ]; then
+    echo "myPOS PIN:    geconfigureerd (usb) — terminal op ${MYPOS_TERMINAL_SERIAL}$([ -e "${MYPOS_TERMINAL_SERIAL}" ] || echo ' (NIET AANWEZIG)')"
+  elif [ "${MYPOS_OK}" = 1 ] && [ "${MYPOS_MODE}" = "lan" ]; then
     echo "myPOS PIN:    geconfigureerd (lan) — terminal op ${MYPOS_TERMINAL_HOST}:${MYPOS_TERMINAL_PORT:-7901}"
   else
     echo "myPOS PIN:    $([ "${MYPOS_OK}" = 1 ] && echo "geconfigureerd (${MYPOS_MODE})" || echo 'NIET geconfigureerd')"

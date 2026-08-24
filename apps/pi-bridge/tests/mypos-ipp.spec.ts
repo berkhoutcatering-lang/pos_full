@@ -132,12 +132,29 @@ describe("een weigering onderweg", () => {
     const port = (server.address() as net.AddressInfo).port
 
     try {
-      const session = runIppMethod({ host: "127.0.0.1", port, method: "PURCHASE" })
+      const session = runIppMethod({
+        target: { host: "127.0.0.1", port },
+        method: "PURCHASE",
+      })
       const final = await session.done
       expect(final.STATUS).toBe("20")
       expect(final.STAGE).toBe("1")
     } finally {
       server.close()
     }
+  })
+})
+
+describe("over een kabel in plaats van het netwerk", () => {
+  it("noemt de poort als die er niet is", async () => {
+    // De USB-route bestaat omdat de terminal aan WiFi zonder internet niet
+    // terugvalt op zijn simkaart. Gaat het adres mis, dan moet de fout de
+    // poortnaam bevatten — "ipp_timeout" stuurt iemand de verkeerde kant op.
+    const session = runIppMethod({
+      target: { serial: "/dev/does-not-exist-hopbites", baud: 115200 },
+      method: "PING",
+    })
+
+    await expect(session.done).rejects.toThrow(/does-not-exist-hopbites/)
   })
 })

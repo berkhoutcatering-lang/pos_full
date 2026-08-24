@@ -21,6 +21,7 @@ import {
 } from "./mypos-intents.js"
 import {
   cancelLanTransaction,
+  ippDriven,
   pollLanStatus,
   startLanTransaction,
 } from "./mypos-lan.js"
@@ -241,7 +242,7 @@ export async function startMyPosTransaction(
     }
   }
 
-  if (config.MYPOS_TRANSPORT === "lan") return startLanTransaction(args)
+  if (ippDriven()) return startLanTransaction(args)
   if (config.MYPOS_TRANSPORT === "app") return startAppTransaction(args)
 
   const existing = findIntent(args.idempotency_key)
@@ -332,7 +333,7 @@ export interface MyPosPollResult {
 }
 
 export async function pollMyPosStatus(handle: string): Promise<MyPosPollResult> {
-  if (config.MYPOS_TRANSPORT === "lan") return pollLanStatus(handle)
+  if (ippDriven()) return pollLanStatus(handle)
   if (config.MYPOS_TRANSPORT === "app") return pollAppStatus(handle)
 
   const row = findIntent(handle)
@@ -425,7 +426,7 @@ export async function pollMyPosStatus(handle: string): Promise<MyPosPollResult> 
 export async function cancelMyPosTransaction(
   handle: string,
 ): Promise<{ cancelled: boolean; status: NormalizedStatus; message?: string }> {
-  if (config.MYPOS_TRANSPORT === "lan") {
+  if (ippDriven()) {
     const { status, message } = cancelLanTransaction(handle)
     return { cancelled: true, status, message }
   }

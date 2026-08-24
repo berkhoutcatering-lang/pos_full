@@ -21,6 +21,7 @@ import {
   type IppFields,
   type IppSession,
 } from "./mypos-ipp.js"
+import type { IppTarget } from "./ipp-link.js"
 
 // PIN over the LAN: the Pi drives the myPOS Ultra directly over TCP with IPP,
 // and the terminal authorises the card over its own SIM. Nothing in this path
@@ -35,8 +36,28 @@ import {
 /** Sessions still live on the terminal, keyed by idempotency key. */
 const live = new Map<string, IppSession>()
 
-function terminal() {
+/**
+ * Rijden wij de terminal zelf met IPP?
+ *
+ * `lan` en `usb` zijn hetzelfde protocol met een andere pijp eronder, dus alles
+ * in dit bestand geldt voor allebei. Het verschil zit alleen in `target()`.
+ */
+export function ippDriven(): boolean {
+  return config.MYPOS_TRANSPORT === "lan" || config.MYPOS_TRANSPORT === "usb"
+}
+
+function target(): IppTarget {
+  if (config.MYPOS_TRANSPORT === "usb") {
+    return { serial: config.MYPOS_TERMINAL_SERIAL!, baud: config.MYPOS_TERMINAL_BAUD }
+  }
   return { host: config.MYPOS_TERMINAL_HOST!, port: config.MYPOS_TERMINAL_PORT }
+}
+
+/** Bereikbaar? Zonder adres of poort valt er niets te sturen. */
+function terminalConfigured(): boolean {
+  return config.MYPOS_TRANSPORT === "usb"
+    ? Boolean(config.MYPOS_TERMINAL_SERIAL)
+    : Boolean(config.MYPOS_TERMINAL_HOST)
 }
 
 /** When we last saw the terminal answer. Alleen voor logging en /_health. */
@@ -67,7 +88,7 @@ const HANDSHAKE_SETTLE_MS = 400
  */
 async function ensureLink(): Promise<void> {
   const started = Date.now()
-  const ping = runIppMethod({ ...terminal(), method: "PING" })
+  const ping = runIppMethod({ target: target(), method: "PING" })
   const final = await ping.done
   lastContactAt = Date.now()
 
@@ -99,7 +120,7 @@ function idleRows(): string[] {
 }
 
 export async function showIdleScreen(): Promise<void> {
-  if (config.MYPOS_TRANSPORT !== "lan" || !config.MYPOS_TERMINAL_HOST) return
+  if (!ippDriven() || !terminalConfigured()) return
   if (!config.MYPOS_TERMINAL_IDLE_SCREEN) return
   // Never paint over a payment in progress.
   if (live.size > 0) return
@@ -109,7 +130,7 @@ export async function showIdleScreen(): Promise<void> {
 
   try {
     const session = runIppMethod({
-      ...terminal(),
+      target: target(),
       method: "DISPLAY_TEXT",
       fields: rows.map((text, i) => [`DISPLAY_TEXT_ROW${i + 1}`, text] as [string, string]),
     })
@@ -130,7 +151,7 @@ export async function showIdleScreen(): Promise<void> {
  * fraction of a second, so this is cheap.
  */
 export function startTerminalHeartbeat() {
-  if (config.MYPOS_TRANSPORT !== "lan" || !config.MYPOS_TERMINAL_HOST) return
+  if (!ippDriven() || !terminalConfigured()) return
 
   const tick = () => {
     if (live.size > 0) return // a payment is already keeping the link warm
@@ -270,7 +291,7 @@ export function receiptFields(f: IppFields) {
 async function confirmToTerminal(sid: string, key: string): Promise<boolean> {
   try {
     const session = runIppMethod({
-      ...terminal(),
+      target: target(),
       method: "COMPLETE_TX",
       fields: [["SID_ORIGINAL", sid]],
     })
@@ -313,7 +334,7 @@ function armedTerminal(frames: IppFields[]): boolean {
  * transactie. Hij vertelt dus zelf welke betaling hem tegenhoudt.
  */
 async function askTerminalStatus(): Promise<IppFields> {
-  const session = runIppMethod({ ...terminal(), method: "GET_STATUS" })
+  const session = runIppMethod({ target: target(), method: "GET_STATUS" })
   const final = await session.done
   lastContactAt = Date.now()
   return final
@@ -428,10 +449,10 @@ async function settleFinalFrame(key: string, final: IppFields) {
   setTimeout(() => void showIdleScreen(), 8_000).unref()
 }
 
-/** Het bedrag klaarzetten op de terminal. Eén TCP-sessie, één betaling. */
+/** Het bedrag klaarzetten op de terminal. Eén sessie, één betaling. */
 function armPurchase(args: MyPosStartArgs): IppSession {
   return runIppMethod({
-    ...terminal(),
+    target: target(),
     method: "PURCHASE",
     fields: [
       ["AMOUNT", formatAmount(args.amount_cents)],

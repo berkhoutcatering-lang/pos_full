@@ -1,6 +1,6 @@
-import net from "node:net"
 import crypto from "node:crypto"
 import { logger } from "../utils/logger.js"
+import { describeTarget, openLink, type IppTarget } from "./ipp-link.js"
 
 /**
  * myPOS Integrated Payments Protocol (IPP) over TCP — the LAN route.
@@ -92,18 +92,18 @@ export function parseFields(payload: Buffer): IppFields {
 }
 
 export interface IppSession {
-  /** Resolves on STAGE=5, rejects on socket failure or timeout. */
+  /** Resolves on STAGE=5, rejects on a broken link or a timeout. */
   done: Promise<IppFields>
   /** Every frame received, newest last — useful for the audit trail. */
   frames: IppFields[]
-  /** Drop the socket. The terminal clears itself after its own TIMEOUT. */
+  /** Laat de verbinding los. De terminal ruimt zichzelf op na zijn TIMEOUT. */
   abort(): void
   sid: string
 }
 
 export interface IppRequest {
-  host: string
-  port: number
+  /** Waar de terminal hangt: een socket of een seriële poort. */
+  target: IppTarget
   method: string
   fields?: Array<[string, string]>
   sid?: string
@@ -124,7 +124,7 @@ export function runIppMethod(req: IppRequest): IppSession {
   const sid = req.sid ?? crypto.randomUUID()
   const frames: IppFields[] = []
 
-  const socket = net.createConnection({ host: req.host, port: req.port })
+  const link = openLink(req.target)
   let buf: Buffer = Buffer.alloc(0)
   let settled = false
 
@@ -132,14 +132,14 @@ export function runIppMethod(req: IppRequest): IppSession {
     const finish = (fn: () => void) => {
       if (settled) return
       settled = true
-      socket.destroy()
+      link.destroy()
       fn()
     }
 
-    socket.setTimeout(req.firstStageTimeoutMs ?? 5_000)
+    link.setIdleTimeout(req.firstStageTimeoutMs ?? 5_000)
 
-    socket.on("connect", () => {
-      socket.write(
+    link.onOpen(() => {
+      link.write(
         encodeFrame([
           ["PROTOCOL", "IPP"],
           ["VERSION", IPP_VERSION],
@@ -150,7 +150,7 @@ export function runIppMethod(req: IppRequest): IppSession {
       )
     })
 
-    socket.on("data", (chunk) => {
+    link.onData((chunk) => {
       buf = Buffer.concat([buf, chunk])
       const taken = takeFrames(buf)
       buf = taken.rest
@@ -175,16 +175,18 @@ export function runIppMethod(req: IppRequest): IppSession {
           return
         }
         // The terminal tells us how long the next stage may take; a card in a
-        // customer's hand is worth waiting for, a silent socket is not.
+        // customer's hand is worth waiting for, a silent link is not.
         const secs = Number(f.TIMEOUT)
         const next = Number.isFinite(secs) && secs > 0 ? secs * 1000 + STAGE_GRACE_MS : STAGE_GRACE_MS
-        socket.setTimeout(Math.min(next, MAX_STAGE_WAIT_MS))
+        link.setIdleTimeout(Math.min(next, MAX_STAGE_WAIT_MS))
       }
     })
 
-    socket.on("timeout", () => finish(() => reject(new Error("ipp_timeout"))))
-    socket.on("error", (err) => finish(() => reject(new Error(`ipp_socket: ${err.message}`))))
-    socket.on("close", () => finish(() => reject(new Error("ipp_closed"))))
+    link.onIdle(() => finish(() => reject(new Error("ipp_timeout"))))
+    link.onError((err) =>
+      finish(() => reject(new Error(`ipp_link ${describeTarget(req.target)}: ${err.message}`))),
+    )
+    link.onClose(() => finish(() => reject(new Error("ipp_closed"))))
   })
 
   return {
@@ -193,7 +195,7 @@ export function runIppMethod(req: IppRequest): IppSession {
     sid,
     abort: () => {
       settled = true
-      socket.destroy()
+      link.destroy()
     },
   }
 }

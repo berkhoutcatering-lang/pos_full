@@ -43,12 +43,23 @@ const ConfigSchema = z.object({
   // to WIFI (TCP/IP). Confirmed end-to-end on 2026-08-19.
   //   app    Onze eigen app op de terminal haalt de betaling op bij de Pi.
   //          Zie docs/hop-terminal-plan.html.
-  MYPOS_TRANSPORT: z.enum(["off", "lan", "app", "cloud"]).default("off"),
+  //   usb    Zelfde IPP, maar over een kabel in plaats van het netwerk. Dit is
+  //          de route voor onderweg: hangt de terminal aan WiFi zonder
+  //          internet, dan stuurt Android het bankverkeer daarheen in plaats
+  //          van over de simkaart en mislukt elke transactie. Met USB staat
+  //          WiFi uit en is de sim de enige uitweg.
+  MYPOS_TRANSPORT: z.enum(["off", "lan", "usb", "app", "cloud"]).default("off"),
 
   // LAN route: where the terminal listens. Port is configurable in POSLink
   // Manager (Settings -> Edit port) and is not the same on every device.
   MYPOS_TERMINAL_HOST: optionalSecret,
   MYPOS_TERMINAL_PORT: z.coerce.number().int().positive().default(7901),
+  // USB-route: het apparaatpad van de terminal. /dev/ttyACM0 bij een kabel,
+  // /dev/rfcomm0 als hij ooit via Bluetooth gaat. Kijk met
+  // `ls -l /dev/serial/by-id/` welke het is — die naam blijft gelijk, ttyACM0
+  // kan verspringen als er meer USB-apparaten in zitten.
+  MYPOS_TERMINAL_SERIAL: optionalSecret,
+  MYPOS_TERMINAL_BAUD: z.coerce.number().int().positive().default(115200),
   // Language of the prompts on the terminal. EN is the only value we have
   // seen a real Ultra accept; NL is untested and an unsupported value comes
   // back as STATUS=3 (UNSUPPORTED PARAM) instead of a payment.
@@ -133,6 +144,11 @@ const ConfigSchema = z.object({
 
     if (c.MYPOS_TRANSPORT === "lan") {
       if (!c.MYPOS_TERMINAL_HOST) missing("MYPOS_TERMINAL_HOST")
+      return
+    }
+
+    if (c.MYPOS_TRANSPORT === "usb") {
+      if (!c.MYPOS_TERMINAL_SERIAL) missing("MYPOS_TERMINAL_SERIAL")
       return
     }
 

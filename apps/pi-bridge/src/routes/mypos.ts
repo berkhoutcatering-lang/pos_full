@@ -8,7 +8,7 @@ import {
   cancelMyPosTransaction,
   refundMyPos,
 } from "../services/mypos-proxy.js"
-import { clearStuckTransaction } from "../services/mypos-lan.js"
+import { clearStuckTransaction, ippDriven } from "../services/mypos-lan.js"
 import { writeAuditEvent } from "../services/audit-log.js"
 import { config } from "../config.js"
 import { ULID_RE } from "../utils/ulid.js"
@@ -117,8 +117,8 @@ export async function myposRoutes(app: FastifyInstance) {
     "/mypos/terminal/clear",
     { preHandler: [authenticateTablet, requireRole("manager")] },
     async (req, reply) => {
-      if (config.MYPOS_TRANSPORT !== "lan") {
-        return reply.code(503).send({ error: "mypos_not_lan" })
+      if (!ippDriven()) {
+        return reply.code(503).send({ error: "mypos_not_ipp" })
       }
       const parsed = ClearSchema.safeParse(req.body ?? {})
       if (!parsed.success) return reply.code(400).send({ error: "validation" })

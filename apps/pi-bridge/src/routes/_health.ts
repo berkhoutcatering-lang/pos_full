@@ -37,6 +37,15 @@ export async function healthRoute(app: FastifyInstance) {
         mypos_terminal_id: config.MYPOS_TID ?? null,
         mypos_gateway:
           config.MYPOS_TRANSPORT === "cloud" ? config.MYPOS_GATEWAY_URL : null,
+        // Waar de terminal aan hangt. Bij "PIN doet het niet" is dit het eerste
+        // dat je wilt zien: een kabel die eruit ligt, of een IP dat is
+        // verschoven na een DHCP-lease.
+        mypos_terminal_link:
+          config.MYPOS_TRANSPORT === "usb"
+            ? (config.MYPOS_TERMINAL_SERIAL ?? null)
+            : config.MYPOS_TRANSPORT === "lan"
+              ? `${config.MYPOS_TERMINAL_HOST}:${config.MYPOS_TERMINAL_PORT}`
+              : null,
         // Alleen gevuld op de app-route: onze eigen app op de terminal.
         terminal_app_online: terminalOnline(),
         terminal_app: getTerminalStatus(),

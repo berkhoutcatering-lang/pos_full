@@ -14,6 +14,11 @@ ExecStart=/usr/bin/node /opt/pi-bridge/dist/index.js
 Restart=always
 RestartSec=5
 
+# Bij MYPOS_TRANSPORT=usb hangt de terminal aan /dev/ttyACM0, en dat apparaat is
+# van root:dialout. De service draait bewust niet als root, dus alleen deze
+# groep erbij — genoeg om de kabel te lezen, niets meer.
+SupplementaryGroups=dialout
+
 # Hardening
 NoNewPrivileges=yes
 ProtectSystem=full
